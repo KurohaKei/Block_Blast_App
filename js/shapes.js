@@ -1,7 +1,6 @@
 // Block Blast - offline, single-file JS. Usage: <script src="blockblast.js"></script> in any HTML page.
   const N = 8, CELL = 40, SIZE = N * CELL, TRAY_H = 120, LIFT = 60;
-  const GLOW = "255, 196, 64";
-  const COLORS = ["#ff5a36", "#ffbd32", "#a445ff", "#14c8c2", "#a0d92a", "#ee3f8c"];
+  const COLORS = DEFAULT_THEME.pieces;
   const MIN_CELLS = 4;
 
   // Relative spawn weight per orientation (only ratios matter). 0 disables an orientation;
@@ -59,7 +58,7 @@
         seen.add(key);
         const id = `${name}-${(k % 4) * 90}${k >= 4 ? "-mirror" : ""}`;
         const s = {
-          id, base: name, baseWeight: SPAWN_WEIGHTS[id] ?? 1, cells, color: COLORS[i % COLORS.length],
+          id, base: name, baseWeight: SPAWN_WEIGHTS[id] ?? 1, cells, paletteIndex: i % COLORS.length, color: COLORS[i % COLORS.length],
           h: Math.max(...cells.map(c => c[0])) + 1, w: Math.max(...cells.map(c => c[1])) + 1
         };
         SHAPES.push(s);
@@ -74,3 +73,6 @@
       }
     }
   });
+  function setShapePalette(palette) {
+    SHAPES.forEach(shape => { shape.color = palette[shape.paletteIndex]; });
+  }

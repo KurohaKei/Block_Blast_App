@@ -12,6 +12,7 @@
   const vibrationToggle = make("input", "", ""); vibrationToggle.type = "checkbox"; vibrationToggle.id = "vibration-toggle";
   const motionToggle = make("input", "", ""); motionToggle.type = "checkbox"; motionToggle.id = "motion-toggle";
   const settingRow = (input, text) => { const label = make("label", "", text); label.className = "setting-row"; label.htmlFor = input.id; label.prepend(input); return label; };
+  const resetThemeButton = make("button", "", "Reset to Default Theme"); resetThemeButton.className = "dialog-button";
   const restartButton = make("button", "", "Restart Game"); restartButton.className = "dialog-button";
   const restartConfirm = make("div", "", ""); restartConfirm.className = "restart-confirm"; restartConfirm.hidden = true;
   const restartQuestion = make("p", "", "Restart this game? Your current progress will be lost.");
@@ -19,7 +20,7 @@
   const restartNo = make("button", "", "Cancel"); restartNo.className = "dialog-button";
   const settingsClose = make("button", "", "Close"); settingsClose.className = "dialog-button";
   restartConfirm.append(restartQuestion, restartYes, restartNo);
-  settingsBody.append(settingRow(soundToggle, "Sound"), settingRow(vibrationToggle, "Vibration"), settingRow(motionToggle, "Reduced motion"), restartButton, restartConfirm, settingsClose);
+  settingsBody.append(settingRow(soundToggle, "Sound"), settingRow(vibrationToggle, "Vibration"), settingRow(motionToggle, "Reduced motion"), resetThemeButton, restartButton, restartConfirm, settingsClose);
   settingsDialog.append(settingsTitle, settingsBody); settingsOverlay.appendChild(settingsDialog); document.body.appendChild(settingsOverlay);
 
   const startOverlay = make("div", "", "");
@@ -60,6 +61,7 @@
   function syncSettings() {
     soundToggle.checked = settings.sound; vibrationToggle.checked = settings.vibration; motionToggle.checked = settings.reducedMotion;
     document.body.classList.toggle("reduced-motion", settings.reducedMotion);
+    resetThemeButton.disabled = getTheme().id === DEFAULT_THEME.id;
   }
   function openSettings() {
     if (over || startOverlay.hidden === false) return;
@@ -76,6 +78,11 @@
     settings.sound = soundToggle.checked; settings.vibration = vibrationToggle.checked; settings.reducedMotion = motionToggle.checked;
     saveSettings(); syncSettings(); render();
   }));
+  resetThemeButton.onclick = () => {
+    resetTheme();
+    render();
+    if (!raf) loop();
+  };
   restartButton.onclick = () => { restartConfirm.hidden = false; restartYes.focus(); };
   restartNo.onclick = () => { restartConfirm.hidden = true; restartButton.focus(); };
   restartYes.onclick = () => { closeSettings(); reset(); };

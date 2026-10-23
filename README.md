@@ -23,8 +23,26 @@ On Android, open the site in Chrome and choose **Install app** (or **Add to Home
 - Fill a complete row or column to clear it.
 - Clear lines to increase your streak multiplier. Three placements without a line clear reset the streak.
 - Open Settings with the gear button to adjust sound, vibration, reduced motion, or restart.
+- Every Perfect board clear switches to another theme without repeating until the theme bag cycles. Themes persist between sessions; use **Reset to Default Theme** in Settings to restore the original palette.
+- Use the download button beside Settings to check for an app update. The page saves the current game, then activates an installed update and reloads; an update waits until you request it.
 - When no remaining piece fits, the game-over dialog offers a Play Again button.
 
 The best score is saved in the browser's local storage.
 
 The game works offline when opened directly from disk. To install it as a PWA, serve it from a secure web origin (HTTPS or localhost).
+
+## Check for app updates
+
+The download button checks connectivity with a small same-origin request, then asks the service-worker registration to check for a newer app version. If one is installed, the game saves and waits for any active drag to finish before activating the new worker and reloading. Failed checks and an already-current app display a short status message. Update checks are never initiated by an app timer or visibility event.
+
+To test the flow locally:
+
+1. Serve the app from `localhost` or HTTPS and open it twice in the same browser profile so the existing service worker controls a page.
+2. To test **up to date**, click the download button without changing the files.
+3. To test an **available update**, increment `CACHE_NAME` in `sw.js` and change a visible app file. Reload once to let the browser discover and install the worker update; click the download button in the still-open controlled page to activate it.
+4. Start dragging a piece before clicking the button and verify the page reloads only after dropping or cancelling the drag.
+5. Disconnect the browser before clicking to check the offline message. For the unsupported case, open the page via `file://` or use a browser with service workers disabled.
+
+Browsers may perform their own service-worker update checks during navigation or at browser-defined intervals. This app does not call `registration.update()` automatically and does not activate waiting updates or reload the page unless the user clicks the download button.
+
+Run `node tests/text-layout.js` for canvas-edge and text-stack layout regression checks.

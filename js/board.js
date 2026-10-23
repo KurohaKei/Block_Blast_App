@@ -19,7 +19,7 @@
   }
   function applyMove(b, s, r, c) {
     const nb = clone(b);
-    s.cells.forEach(([dr, dc]) => (nb[r + dr][c + dc] = s.color));
+    s.cells.forEach(([dr, dc]) => (nb[r + dr][c + dc] = s.paletteIndex + 1));
     const rows = [], cols = [];
     for (let i = 0; i < N; i++) {
       if (nb[i].every(Boolean)) rows.push(i);

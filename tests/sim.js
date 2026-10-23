@@ -27,6 +27,7 @@ function makeGame(random) {
   seededMath.random = random;
   const context = vm.createContext({
     Math: seededMath,
+    localStorage: { getItem: () => null },
     sets: 0,
     stash: null,
     streak: 0,
@@ -34,7 +35,7 @@ function makeGame(random) {
     popped: false,
     helpStreak: 0
   });
-  for (const file of ["js/shapes.js", "js/board.js", "js/generator.js"]) {
+  for (const file of ["js/themes.js", "js/shapes.js", "js/board.js", "js/generator.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
   }
   context.api = vm.runInContext("({ N, emptyBoard, fits, applyMove, isEmpty, generatePieces })", context);

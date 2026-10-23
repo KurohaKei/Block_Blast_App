@@ -1,24 +1,36 @@
   const SHOW_STREAK_TEXT = false;
   const make = (tag, style, text) => { const e = document.createElement(tag); e.style.cssText = style; if (text) e.textContent = text; return e; };
-  const pageBackground = "radial-gradient(ellipse at center, transparent 52%, rgba(15, 27, 55, 0.22) 100%), radial-gradient(ellipse at center, #4a69a8 0%, #3b578e 62%, #2a3f6b 100%)";
-  document.body.style.cssText = `margin:0;background:${pageBackground};overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;`;
+  document.body.style.cssText = "margin:0;background:var(--page-background,#3b578e);overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;";
   const page = make("div", "width:min(calc(94vw - 14px),506px,max(166px,calc(72.73vh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73svh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73dvh - 115px)));height:100vh;height:100svh;height:100dvh;min-height:0;margin:auto;padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;font-family:sans-serif;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none;");
   document.body.appendChild(page);
   const bar = make("div", "width:100%;flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;font-weight:bold;font-size:22px;");
-  const bestEl = make("div", "display:flex;align-items:center;gap:7px;color:#ffbd32;");
-  const gear = make("button", "font-size:26px;background:none;border:none;color:#a9d9f6;cursor:pointer;", "\u2699");
+  const bestEl = make("div", "display:flex;align-items:center;gap:7px;color:var(--accent);");
+  const headerControls = make("div", "display:flex;align-items:center;gap:6px;");
+  const updateButton = make("button", "", "");
+  updateButton.className = "icon-button update-button";
+  updateButton.type = "button";
+  updateButton.setAttribute("aria-label", "Check for updates");
+  updateButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v7"/><path d="M8.5 11.5L12 15l3.5-3.5"/><path d="M8 17.5h8"/></svg>';
+  const gear = make("button", "font-size:26px;background:none;border:none;color:var(--gear);cursor:pointer;", "\u2699");
+  gear.className = "icon-button settings-button";
   gear.setAttribute("aria-label", "Settings");
+  const updateStatus = make("div", "", "");
+  updateStatus.className = "update-status";
+  updateStatus.setAttribute("role", "status");
+  updateStatus.setAttribute("aria-live", "polite");
+  updateStatus.hidden = true;
   const scoreWrap = make("div", "position:relative;flex:0 0 auto;min-height:clamp(54px,12vh,78px);display:grid;place-items:center;isolation:isolate;");
-  const gemEl = make("div", "position:absolute;z-index:-1;width:62px;height:62px;background:#29d6cf;clip-path:polygon(50% 0,94% 28%,78% 88%,50% 100%,22% 88%,6% 28%);opacity:.35;filter:drop-shadow(0 0 14px currentColor);");
+  const gemEl = make("div", "position:absolute;z-index:-1;width:62px;height:62px;background:var(--gem);clip-path:polygon(50% 0,94% 28%,78% 88%,50% 100%,22% 88%,6% 28%);opacity:.35;filter:drop-shadow(0 0 14px currentColor);");
   gemEl.className = "score-gem";
   const scoreEl = make("div", "position:relative;font-size:clamp(42px,12vw,62px);line-height:1;font-weight:800;font-variant-numeric:tabular-nums;text-shadow:0 2px 8px rgba(0,0,0,.24);");
-  const infoEl = SHOW_STREAK_TEXT ? make("div", "flex:0 0 auto;font-size:14px;color:#ffe067;height:18px;") : null;
+  const infoEl = SHOW_STREAK_TEXT ? make("div", "flex:0 0 auto;font-size:14px;color:var(--info-text);height:18px;") : null;
   scoreWrap.append(gemEl, scoreEl);
-  bar.append(bestEl, gear);
-  const boardCv = make("canvas", "width:100%;height:auto;aspect-ratio:1;border-radius:14px;background:#18254f;touch-action:none;");
+  headerControls.append(updateButton, gear);
+  bar.append(bestEl, headerControls);
+  const boardCv = make("canvas", "width:100%;height:auto;aspect-ratio:1;border-radius:14px;background:var(--board-bg);touch-action:none;");
   boardCv.className = "board";
   const trayCv = make("canvas", "width:100%;height:auto;flex:0 0 auto;aspect-ratio:8/3;touch-action:none;");
-  page.append(bar, scoreWrap);
+  page.append(bar, updateStatus, scoreWrap);
   if (SHOW_STREAK_TEXT) page.append(infoEl);
   page.append(boardCv, trayCv);
   const bx = boardCv.getContext("2d"), tx = trayCv.getContext("2d");
@@ -110,6 +122,10 @@
   }
 
   function render() {
+    const activeTheme = getTheme();
+    applyThemeVariables(activeTheme);
+    setShapePalette(activeTheme.pieces);
+    resetThemeButton.disabled = activeTheme.id === DEFAULT_THEME.id;
     bestEl.textContent = "\uD83D\uDC51 " + shownBest;
     gemEl.hidden = streak < 1;
     const comboTier = comboTierFor(streak);
@@ -117,10 +133,10 @@
     boardCv.dataset.comboTier = String(comboTier);
     if (SHOW_STREAK_TEXT) infoEl.textContent = streak ? `MULTIPLIER x${1 + streak}  \u00B7  ${popped ? "SET SAFE" : "POP THIS SET"}` : "";
     if (displayedScore !== score || !scoreEl.textContent) animateScore(score);
-    bx.clearRect(0, 0, SIZE, SIZE); bx.fillStyle = "#18254f"; bx.fillRect(0, 0, SIZE, SIZE);
+    bx.clearRect(0, 0, SIZE, SIZE); bx.fillStyle = activeTheme.boardBg; bx.fillRect(0, 0, SIZE, SIZE);
     for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-      if (board[r][c]) cell(bx, c * CELL, r * CELL, CELL, board[r][c]);
-      else { bx.fillStyle = "#202d59"; bx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); bx.strokeStyle = "rgba(140,165,215,.12)"; bx.lineWidth = 0.7; bx.strokeRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); }
+      if (board[r][c]) cell(bx, c * CELL, r * CELL, CELL, activeTheme.pieces[board[r][c] - 1]);
+      else { bx.fillStyle = activeTheme.emptyCell; bx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); bx.strokeStyle = activeTheme.emptyStroke; bx.lineWidth = 0.7; bx.strokeRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); }
     }
     if (drag) {
       const s = pieces[drag.i], { r, c } = target();
@@ -128,7 +144,7 @@
         const pop = previewLines(s, r, c), isPop = (y, x) => pop.rows.includes(y) || pop.cols.includes(x);
         s.cells.forEach(([dr, dc]) => cell(bx, (c + dc) * CELL, (r + dr) * CELL, CELL, s.color, isPop(r + dr, c + dc) ? 1 : 0.7));
         if (pop.rows.length + pop.cols.length) {
-          const t = settings.reducedMotion ? 0 : performance.now() / 1000, gc = rgbOf(s.color);
+          const t = settings.reducedMotion ? 0 : performance.now() / 1000, gc = rgbOf(activeTheme.glow);
           const glow = (y, x, k) => {
             const wave = settings.reducedMotion ? 0.5 : Math.pow(0.5 + 0.5 * Math.sin(k * 0.9 - t * 7), 3);
             bx.fillStyle = `rgba(${gc}, ${0.16 + 0.4 * wave})`; bx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
@@ -143,7 +159,7 @@
           bx.shadowBlur = 0;
         }
       } else {
-        bx.save(); bx.fillStyle = "rgba(255, 70, 70, 0.18)"; bx.strokeStyle = "rgba(255, 100, 100, 0.75)";
+        bx.save(); bx.fillStyle = `rgba(${rgbOf(activeTheme.dangerBg)}, 0.18)`; bx.strokeStyle = `rgba(${rgbOf(activeTheme.dangerBg)}, 0.75)`;
         s.cells.forEach(([dr, dc]) => {
           const y = r + dr, x = c + dc;
           if (y < 0 || y >= N || x < 0 || x >= N) return;
