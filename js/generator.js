@@ -1,6 +1,6 @@
-  // ---------- Tuning ----------
+// ---------- Tuning ----------
   const DEBUG_GEN = true;            // set to false to silence the console logs
-  const ASSIST_MAX = 0.85;
+  const ASSIST_MAX = 0.90;           // was 0.85
   const MID_SETS = 3;
   const SPARSE_CELLS_1 = 24, SPARSE_ASSIST_1 = 0.45;
   const SPARSE_CELLS_2 = 16, SPARSE_ASSIST_2 = 0.7;
@@ -8,7 +8,7 @@
   const HOLE_MIN = 4, HOLE_MAX = 9;
   const PERFECT_CELLS = 25;
   const PERFECT_TRIES = 60;
-  const PERFECT_CHANCE = 0.25;
+  const PERFECT_CHANCE = 0.35;       // was 0.25
   const CARRY_CHANCE = 0.15;
 
   // Sequential set builder
@@ -20,8 +20,28 @@
   const HOLE_FIT_BOOST = 2.5;        // piece exactly fills an enclosed hole (4+ cells)
   const DUP_SAME_SHAPE = 0.1;        // same orientation already in this set
   const DUP_SAME_BASE = 0.4;         // same base shape, other rotation, already in this set
-  const HELP_P_MIN = 0.2, HELP_P_SPAN = 0.6;   // per-slot help chance = MIN + SPAN * assist
+  const HELP_P_MIN = 0.25, HELP_P_SPAN = 0.6;  // per-slot help chance = MIN + SPAN * assist (MIN was 0.2)
   const SET_TRIES = 15;
+
+  // Solvability guarantee: on a busy board the set must clear at least one line in the simulation.
+  // If slot 1 clears nothing, slot 2 must clear or set up a clear, and slot 3 must clear.
+  const GUARANTEE_CLEAR = true;
+  const GUARANTEE_MIN_CELLS = 30;    // guarantee applies when the real board has at least this many filled cells
+
+  // Line-perfect checker (runs before the normal builder)
+  const PERFECT_LINE_CHANCE = 1;     // chance a found line-perfect is used (1 = always)
+  const PERFECT_MAX_SPAN = 2;        // a 1-line perfect may span at most this many lines across the cleared line
+  const PERFECT_CHAIN_CHANCE = 1;    // chance slot 2 also gets a line-perfect, checked on the board after slot 1 pops (1 = always)
+
+  // Zigzag -> matching L4 pair (boosts those L4s in later slots of the same set)
+  const ZIG_L_BOOST = 1.5;                    // modest multiplier on the L4's base weight
+  const ZIG_PAIR_PENALTY = DUP_SAME_SHAPE;    // if one L of a linked pair is in the set, the other gets this
+  const ZIG_L = {
+    "zigzag4-0":         ["L4-90", "L4-270"],
+    "zigzag4-90":        ["L4-180", "L4-0"],
+    "zigzag4-0-mirror":  ["L4-270-mirror", "L4-90-mirror"],
+    "zigzag4-90-mirror": ["L4-0-mirror", "L4-180-mirror"]
+  };
 
   // Crowded board: affects the FIRST slot only
   const CROWD_START = 0.55, CROWD_FULL = 0.85; // board fill range mapped to crowd 0..1
@@ -161,6 +181,58 @@
     return best;
   }
 
+  // ---------- Line-perfect checker ----------
+  // Looks at every placement of every piece on the real board and keeps the ones that clear lines:
+  //   - clears 2+ lines: always allowed (the piece may stick out into a third line)
+  //   - clears 1 line: the piece may span at most PERFECT_MAX_SPAN lines across the cleared line,
+  //     so it never reaches a third line
+  // Ranking: more lines cleared first; then big pieces (4+ cells, not a diagonal) before small ones;
+  // then the fewest cells dropped into a completely empty line; then the fewest cells left on the board.
+  // If only small pieces work, the largest one is used. Ties are picked at random.
+  // avoid: shape ids already in the set (used when checking slot 2 so it doesn't repeat slot 1).
+  const isSmallShape = s => s.cells.length < MIN_CELLS || s.base.startsWith("diagonal");
+
+  function findLinePerfect(b, avoid = []) {
+    const g = toMask(b);
+    let colsUsed = 0;
+    for (let i = 0; i < N; i++) colsUsed |= g[i];
+    const cands = [];
+    for (const s of SHAPES) {
+      if (s.baseWeight <= 0 || (sets <= 2 && s.cells.length > 6)) continue;
+      if (avoid.includes(s.id)) continue;   // don't repeat a piece already in this set
+      for (let r = 0; r <= N - s.h; r++) for (let c = 0; c <= N - s.w; c++) {
+        if (!simFits(g, s, r, c)) continue;
+        const ng = g.slice();
+        for (let i = 0; i < s.h; i++) ng[r + i] |= s.m[i] << c;
+        let cols = 255, rows = 0;
+        for (let i = 0; i < N; i++) { cols &= ng[i]; if (ng[i] === 255) rows |= 1 << i; }
+        const lines = POP[cols] + POP[rows];
+        if (!lines) continue;
+        if (lines === 1 && (rows ? s.h : s.w) > PERFECT_MAX_SPAN) continue;   // would reach a third line
+        let left = 0, empty = 0;
+        for (const [i, j] of s.cells) {
+          const wr = r + i, wc = c + j;
+          if (((rows >> wr) & 1) || ((cols >> wc) & 1)) continue;   // this cell clears with the line
+          left++;
+          if ((rows && !g[wr]) || (cols && !((colsUsed >> wc) & 1))) empty++;   // lands in an empty line
+        }
+        cands.push({ s, r, c, lines, left, empty, small: isSmallShape(s) });
+      }
+    }
+    if (!cands.length) return null;
+    const key = o => [-o.lines, o.small ? 1 : 0, o.small ? -o.s.cells.length : 0, o.empty, o.left];
+    const cmp = (a, z) => {
+      const ka = key(a), kz = key(z);
+      for (let i = 0; i < ka.length; i++) if (ka[i] !== kz[i]) return ka[i] - kz[i];
+      return 0;
+    };
+    cands.sort(cmp);
+    const top = cands.filter(o => cmp(o, cands[0]) === 0);
+    const shape = weightedPick([...new Set(top.map(o => o.s))]);
+    const spots = top.filter(o => o.s === shape);
+    return spots[Math.floor(Math.random() * spots.length)];
+  }
+
   function assistLevel(b) {
     const cells = filledCells(b);
     const fill = cells / (N * N);
@@ -223,8 +295,15 @@
     return boost;
   }
 
-  const dupPenalty = (s, set) => set.reduce((m, x) =>
-    m * (x.id === s.id ? DUP_SAME_SHAPE : x.base === s.base ? DUP_SAME_BASE : 1), 1);
+  // links = array of target pairs from zigzags already picked in this set.
+  // A linked L pair penalty replaces (does not stack with) the same-base penalty.
+  const dupPenalty = (s, set, links = []) => set.reduce((m, x) => {
+    let f = 1;
+    if (x.id === s.id) f = DUP_SAME_SHAPE;
+    else if (links.some(t => t.includes(s.id) && t.includes(x.id))) f = ZIG_PAIR_PENALTY;
+    else if (x.base === s.base) f = DUP_SAME_BASE;
+    return m * f;
+  }, 1);
 
   // Boosted pieces together may not exceed `cap` of the pool (soft: never below their own base weight).
   function capHelpShare(pool, cap) {
@@ -237,15 +316,39 @@
     for (const o of pool) if (o.boosted) o.w = Math.max(o.base, o.w * f);
   }
 
+  // Big pieces first: keep only pieces of MIN_CELLS+ cells if there are any, otherwise keep everything.
+  // Small pieces are a last resort, used only when no big piece qualifies.
+  const preferBig = (arr, shapeOf = x => x) => {
+    const big = arr.filter(x => shapeOf(x).cells.length >= MIN_CELLS);
+    return big.length ? big : arr;
+  };
+
+  // Can this piece clear at least one line somewhere on grid g?
+  function clearsAny(g, s) {
+    for (let r = 0; r <= N - s.h; r++) for (let c = 0; c <= N - s.w; c++) {
+      if (simFits(g, s, r, c) && simDrop(g, s, r, c).lines > 0) return true;
+    }
+    return false;
+  }
+
   // One piece at a time. Each slot sees the board as if the earlier pieces were already placed.
   // Slot 1 always fits the real board, so at least one piece is always placeable.
   // Slots 2 and 3 are only helped if the previous piece actually cleared a line in the simulation (a chain).
-  function sequentialSet(b, assist, helpAllowed, crowd) {
+  // A zigzag in slot 1 or 2 boosts its matching L4 pair in the later slots of the same set.
+  // mustClear: the set has to clear a line in the simulation. If nothing has cleared before slot 2,
+  // slot 2 is limited to pieces that clear or leave a clear for some slot-3 piece; if nothing has
+  // cleared before slot 3, slot 3 is limited to pieces that clear.
+  // forced: a line-perfect {s, r, c, lines} that takes slot 1 at a fixed spot.
+  // Chain: when slot 1 is forced, slot 2 re-runs the line-perfect checker on the simulated board
+  // after slot 1 popped (PERFECT_CHAIN_CHANCE). Slot 3 is built normally.
+  function sequentialSet(b, assist, helpAllowed, crowd, mustClear, forced) {
     const live = SHAPES.filter(s => s.baseWeight > 0 && fits(b, s) && (sets > 2 || s.cells.length <= 6));
     let W = b, g = toMask(b);
     const set = [], trace = [];
     let helped = false;
     let lastLines = 0;
+    let totalLines = 0;   // lines cleared so far in the simulation
+    let zigLinks = [];   // target L4 pairs activated by zigzags picked in slots 1-2
     const sustain = !popped && streak >= 2 ? Math.min(0.3, 0.1 * streak) : 0;
     const pHelp = Math.min(0.95, HELP_P_MIN + HELP_P_SPAN * assist + sustain);
 
@@ -258,19 +361,33 @@
       const cap = HELP_SHARE_CAP + CRISIS_CAP_EXTRA * slotCrowd;
       const holes = wantHelp ? new Set(holeGroups(W).flat()) : null;
 
-      const pool = [];
-      for (const s of live) {
+      const needClear = mustClear && totalLines === 0;   // nothing has cleared yet in the simulation
+
+      let pool = [];
+      let forcedHere = k === 0 ? forced : null;
+      if (k === 1 && forced && Math.random() < PERFECT_CHAIN_CHANCE) {
+        // W is the board after slot 1 was placed and popped in the simulation
+        forcedHere = findLinePerfect(W, set.map(x => x.id)) || null;
+      }
+      if (forcedHere) {
+        // line-perfect piece: fixed shape and fixed spot
+        pool.push({ s: forcedHere.s, p: { r: forcedHere.r, c: forcedHere.c }, pen: 1, zig: 1, base: 1, w: 1, boosted: false });
+      }
+      for (const s of forcedHere ? [] : live) {
         const p = bestPlacement(g, s);
         if (!p) continue; // does not fit the simulated board
-        const base = s.baseWeight * dupPenalty(s, set);
+        const pen = dupPenalty(s, set, zigLinks);
+        const zig = zigLinks.some(t => t.includes(s.id)) ? ZIG_L_BOOST : 1;
+        const base = s.baseWeight * pen * zig;
         const boost = wantHelp ? helpBoost(s, p, holes.has(s), slotCrowd) : 1;
-        pool.push({ s, p, base, w: base * boost, boosted: boost > 1 });
+        pool.push({ s, p, pen, zig, base, w: base * boost, boosted: boost > 1 });
       }
 
       if (!pool.length) {
         // Nothing fits the simulated board: use a filler that fits the REAL board (slots 2-3 only).
         if (k === 0) return null;
-        const filler = weightedPick(live, s => s.baseWeight * dupPenalty(s, set));
+        if (needClear && k === 2) return null;   // slot 3 had to clear and cannot
+        const filler = weightedPick(preferBig(live), s => s.baseWeight * dupPenalty(s, set, zigLinks));
         if (!filler) return null;
         set.push(filler);
         lastLines = 0;
@@ -278,19 +395,37 @@
         continue;
       }
 
+      // Solvability guarantee
+      if (needClear && k === 1) {
+        // Slot 2: clear now, or leave the board so that some slot-3 piece can clear.
+        pool = pool.filter(o => o.p.lines > 0 || live.some(s => clearsAny(o.p.g, s)));
+        if (!pool.length) return null;
+        pool = preferBig(pool, o => o.s);   // big pieces first, small only if no big one qualifies
+      } else if (needClear && k === 2) {
+        // Slot 3: the last chance, it has to clear.
+        pool = pool.filter(o => o.p.lines > 0);
+        if (!pool.length) return null;
+        pool = preferBig(pool, o => o.s);   // big pieces first, small only if no big one qualifies
+      }
+
       if (wantHelp) capHelpShare(pool, cap);
       const pick = weightedPick(pool, o => o.w);
       if (pick.boosted) helped = true;
       set.push(pick.s);
+      if (k < 2 && ZIG_L[pick.s.id]) zigLinks.push(ZIG_L[pick.s.id]);
       const res = applyMove(W, pick.s, pick.p.r, pick.p.c); // simulated, includes line clears
       W = res.board;
       g = toMask(W);
       lastLines = res.lines;
+      totalLines += res.lines;
       trace.push(
         `slot${k + 1}: chain=${chain} help=${wantHelp} pool=${pool.length} -> ${pick.s.id}` +
-        ` boosted=${pick.boosted} dupPenalty=${dupPenalty(pick.s, set.slice(0, -1))} simLines=${res.lines}`
+        ` boosted=${pick.boosted} dupPenalty=${pick.pen} zigBoost=${pick.zig} simLines=${res.lines}` +
+        (needClear ? " rescue=true" : "") +
+        (forcedHere ? ` PERFECT lines=${forcedHere.lines}` : "")
       );
     }
+    if (mustClear && totalLines === 0) return null;
     return { set, helped, trace };
   }
 
@@ -340,12 +475,32 @@
       }
     }
 
-    // Main path: sequential builder
-    for (let t = 0; t < SET_TRIES; t++) {
-      const r = sequentialSet(b, assist, helpAllowed, crowd);
-      if (r && easyOpening(r.set)) {
-        helpStreak = r.helped ? helpStreak + 1 : 0;
-        return logPath("sequential", b, shuffle(r.set), r.trace, t + 1);
+    // Line-perfect: the checker runs before the normal builder. Slot 1 gets a piece that clears 2 lines
+    // (or 1 line without reaching a third line). Slot 2 is checked again on the board after slot 1 pops
+    // (see PERFECT_CHAIN_CHANCE); slot 3 is built normally on the board after that.
+    const perfect = findLinePerfect(b);
+    if (perfect && Math.random() < PERFECT_LINE_CHANCE) {
+      for (let t = 0; t < SET_TRIES; t++) {
+        const r = sequentialSet(b, assist, helpAllowed, crowd, false, perfect);
+        if (r && easyOpening(r.set)) {
+          helpStreak++;
+          return logPath(`line-perfect-${perfect.lines}`, b, shuffle(r.set), r.trace, t + 1);
+        }
+      }
+    }
+
+    // Main path: sequential builder.
+    // On a busy board the first pass requires the set to clear a line in the simulation (solvable).
+    // If that cannot be built in SET_TRIES attempts, a second pass runs without the requirement.
+    const mustClear = GUARANTEE_CLEAR && filled >= GUARANTEE_MIN_CELLS;
+    for (const guard of mustClear ? [true, false] : [false]) {
+      for (let t = 0; t < SET_TRIES; t++) {
+        const r = sequentialSet(b, assist, helpAllowed, crowd, guard);
+        if (r && easyOpening(r.set)) {
+          helpStreak = r.helped ? helpStreak + 1 : 0;
+          const path = mustClear && !guard ? "sequential-NO-GUARANTEE" : "sequential";
+          return logPath(path, b, shuffle(r.set), r.trace, t + 1);
+        }
       }
     }
 

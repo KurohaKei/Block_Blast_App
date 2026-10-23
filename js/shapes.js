@@ -6,22 +6,22 @@
 
   // Relative spawn weight per orientation (only ratios matter). 0 disables an orientation;
   // if every fitting option is disabled, selection falls back to a fitting shape.
-  // Tuning: pieces of 3 cells or fewer = 0.4, L4 (8 orientations) = 0.55 each,
-  // bar4 = 0.7, square2 = 2, square3 = 1.5, everything else = 1.
+  // Tuning: single, bar2, bar3, L3, diagonals = 0.3, S/Z and T = 0.8, L4 (8 orientations) = 0.55 each,
+  // bar4 = 0.7, square2 = 2.1, rect2x3 = 1.05, square3 = 1.5, everything else = 1.
   const SPAWN_WEIGHTS = {
-    "single-0": 0.4,
-    "bar2-0": 0.4, "bar2-90": 0.4,
-    "bar3-0": 0.4, "bar3-90": 0.4,
+    "single-0": 0.3,
+    "bar2-0": 0.3, "bar2-90": 0.3,
+    "bar3-0": 0.3, "bar3-90": 0.3,
     "bar4-0": 0.7, "bar4-90": 0.7,
     "bar5-0": 1, "bar5-90": 1,
-    "square2-0": 2,
-    "rect2x3-0": 1, "rect2x3-90": 1,
+    "square2-0": 2.1,
+    "rect2x3-0": 1.05, "rect2x3-90": 1.05,
     "square3-0": 1.5,
-    "diagonal2-0": 0.4, "diagonal2-90": 0.4,
-    "diagonal3-0": 0.4, "diagonal3-90": 0.4,
-    "zigzag4-0": 1, "zigzag4-90": 1, "zigzag4-0-mirror": 1, "zigzag4-90-mirror": 1,
-    "T4-0": 1, "T4-90": 1, "T4-180": 1, "T4-270": 1,
-    "L3-0": 0.4, "L3-90": 0.4, "L3-180": 0.4, "L3-270": 0.4,
+    "diagonal2-0": 0.3, "diagonal2-90": 0.3,
+    "diagonal3-0": 0.3, "diagonal3-90": 0.3,
+    "zigzag4-0": 0.8, "zigzag4-90": 0.8, "zigzag4-0-mirror": 0.8, "zigzag4-90-mirror": 0.8,
+    "T4-0": 0.8, "T4-90": 0.8, "T4-180": 0.8, "T4-270": 0.8,
+    "L3-0": 0.3, "L3-90": 0.3, "L3-180": 0.3, "L3-270": 0.3,
     "L4-0": 0.55, "L4-90": 0.55, "L4-180": 0.55, "L4-270": 0.55,
     "L4-0-mirror": 0.55, "L4-90-mirror": 0.55, "L4-180-mirror": 0.55, "L4-270-mirror": 0.55,
     "L7-0": 1, "L7-90": 1, "L7-180": 1, "L7-270": 1
