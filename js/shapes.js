@@ -1,7 +1,7 @@
 // Block Blast - offline, single-file JS. Usage: <script src="blockblast.js"></script> in any HTML page.
   const N = 8, CELL = 40, SIZE = N * CELL, TRAY_H = 120, LIFT = 60;
   const GLOW = "255, 196, 64";
-  const COLORS = ["#ff351f", "#ff8e2b", "#ffce08", "#37ff8a", "#20ffd2", "#22a7ff", "#c635ff", "#ff3596"];
+  const COLORS = ["#ff5a36", "#ffbd32", "#a445ff", "#14c8c2", "#a0d92a", "#ee3f8c"];
   const MIN_CELLS = 4;
 
   // Relative spawn weight per orientation (only ratios matter). 0 disables an orientation;

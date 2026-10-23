@@ -1,4 +1,7 @@
   const SAVE_KEY = "bb_save", SETTINGS_KEY = "bb_settings";
+  const LEGACY_COLORS = ["#ff351f", "#ff8e2b", "#ffce08", "#37ff8a", "#20ffd2", "#22a7ff", "#c635ff", "#ff3596"];
+  const normalizeColor = color => COLORS.includes(color) ? color :
+    LEGACY_COLORS.includes(color) ? COLORS[LEGACY_COLORS.indexOf(color) % COLORS.length] : null;
   function localGet(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
   }
@@ -28,10 +31,10 @@
   const shapeIdentity = shape => shape ? { cells: shape.cells.map(cell => cell.slice()), color: shape.color } : null;
   function matchShape(value) {
     if (value === null) return null;
-    if (!value || typeof value !== "object" || typeof value.color !== "string" || !Array.isArray(value.cells)) return undefined;
+    if (!value || typeof value !== "object" || typeof value.color !== "string" || !normalizeColor(value.color) || !Array.isArray(value.cells)) return undefined;
     if (!value.cells.every(cell => Array.isArray(cell) && cell.length === 2 && cell.every(Number.isInteger))) return undefined;
     const key = cellsKey(value.cells);
-    return SHAPES.find(shape => shape.color === value.color && cellsKey(shape.cells) === key);
+    return SHAPES.find(shape => cellsKey(shape.cells) === key);
   }
   function serializeState(state) {
     return {
@@ -43,7 +46,7 @@
   }
   function validState(value) {
     if (!value || typeof value !== "object" || !Array.isArray(value.board) || value.board.length !== N ||
-        !value.board.every(row => Array.isArray(row) && row.length === N && row.every(cell => cell === null || COLORS.includes(cell))) ||
+        !value.board.every(row => Array.isArray(row) && row.length === N && row.every(cell => cell === null || normalizeColor(cell))) ||
         !Array.isArray(value.pieces) || value.pieces.length !== 3 ||
         !Number.isSafeInteger(value.score) || value.score < 0 ||
         !Number.isSafeInteger(value.streak) || value.streak < 0 ||
@@ -58,7 +61,7 @@
       stash = value.stash.map(matchShape);
     }
     return {
-      board: value.board.map(row => row.slice()), pieces, score: value.score, streak: value.streak,
+      board: value.board.map(row => row.map(cell => normalizeColor(cell))), pieces, score: value.score, streak: value.streak,
       popped: value.popped, sets: value.sets, stash, over: value.over,
       best: Number.isSafeInteger(value.best) && value.best >= 0 ? value.best : best,
       bestAtStart: value.bestAtStart

@@ -14,6 +14,8 @@ This project is a static front-end and can be deployed directly to Vercel withou
 
 After opening the deployed site once while online, wait for the service worker to cache the game files. Then use your browser's **Install app** or **Add to Home Screen** option. The installed game can launch offline; updating it requires reconnecting to the internet.
 
+On Android, open the site in Chrome and choose **Install app** (or **Add to Home screen**) from the browser menu. On iPhone or iPad, open the HTTPS site in Safari, tap **Share**, then **Add to Home Screen**. iOS does not offer PWA installation from every third-party browser. This installs the game to the device home screen; publishing a native app in Google Play or the App Store requires a separate native wrapper and store submission.
+
 ## Play
 
 - Drag a piece from the tray onto the board to place it.

@@ -1,4 +1,4 @@
-const CACHE_NAME = "block-blast-v3";
+const CACHE_NAME = "block-blast-v5";
 const ASSETS = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ const ASSETS = [
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon-maskable-512.png",
   "./icons/apple-touch-icon.png",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg"

@@ -1,7 +1,8 @@
   const SHOW_STREAK_TEXT = false;
   const make = (tag, style, text) => { const e = document.createElement(tag); e.style.cssText = style; if (text) e.textContent = text; return e; };
-  document.body.style.cssText = "margin:0;background:#3b578e;overscroll-behavior:none;touch-action:none;user-select:none;";
-  const page = make("div", "width:min(calc(94vw - 14px),506px,max(166px,calc(72.73dvh - 115px)));height:100vh;height:100dvh;min-height:0;margin:auto;padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;font-family:sans-serif;color:#fff;user-select:none;touch-action:none;");
+  const pageBackground = "radial-gradient(ellipse at center, transparent 52%, rgba(15, 27, 55, 0.22) 100%), radial-gradient(ellipse at center, #4a69a8 0%, #3b578e 62%, #2a3f6b 100%)";
+  document.body.style.cssText = `margin:0;background:${pageBackground};overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;`;
+  const page = make("div", "width:min(calc(94vw - 14px),506px,max(166px,calc(72.73vh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73svh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73dvh - 115px)));height:100vh;height:100svh;height:100dvh;min-height:0;margin:auto;padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;font-family:sans-serif;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none;");
   document.body.appendChild(page);
   const bar = make("div", "width:100%;flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;font-weight:bold;font-size:22px;");
   const bestEl = make("div", "display:flex;align-items:center;gap:7px;color:#ffbd32;");
@@ -14,7 +15,7 @@
   const infoEl = SHOW_STREAK_TEXT ? make("div", "flex:0 0 auto;font-size:14px;color:#ffe067;height:18px;") : null;
   scoreWrap.append(gemEl, scoreEl);
   bar.append(bestEl, gear);
-  const boardCv = make("canvas", "width:100%;height:auto;aspect-ratio:1;border-radius:14px;background:#18254f;touch-action:none;box-shadow:0 0 0 7px #7286b3,0 8px 24px rgba(9,19,45,.22);");
+  const boardCv = make("canvas", "width:100%;height:auto;aspect-ratio:1;border-radius:14px;background:#18254f;touch-action:none;");
   boardCv.className = "board";
   const trayCv = make("canvas", "width:100%;height:auto;flex:0 0 auto;aspect-ratio:8/3;touch-action:none;");
   page.append(bar, scoreWrap);
@@ -65,6 +66,21 @@
     return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
   };
   const rgbOf = hex => { const n = parseInt(hex.slice(1), 16); return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`; };
+  const glossyTiles = new WeakMap();
+  function glossyTile(g, size) {
+    let cache = glossyTiles.get(g);
+    if (!cache) { cache = new Map(); glossyTiles.set(g, cache); }
+    const key = Math.ceil(size);
+    if (cache.has(key)) return cache.get(key);
+    const tile = document.createElement("canvas");
+    tile.width = tile.height = key;
+    const ctx = tile.getContext("2d"), gradient = ctx.createLinearGradient(0, 0, key * 0.55, key * 0.55);
+    gradient.addColorStop(0, "rgba(255,255,255,0.28)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, key, key);
+    cache.set(key, tile);
+    return tile;
+  }
   function cell(g, x, y, size, color, alpha = 1) {
     const x0 = x + 1, y0 = y + 1, s = size - 2, b = Math.max(2, s * 0.14);
     const face = (c, pts) => { g.fillStyle = c; g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); g.closePath(); g.fill(); };
@@ -73,7 +89,9 @@
     face(shade(color, 35), [[x0, y0], [x0 + b, y0 + b], [x0 + b, y0 + s - b], [x0, y0 + s]]);
     face(shade(color, -35), [[x0 + s, y0], [x0 + s, y0 + s], [x0 + s - b, y0 + s - b], [x0 + s - b, y0 + b]]);
     face(shade(color, -70), [[x0, y0 + s], [x0 + b, y0 + s - b], [x0 + s - b, y0 + s - b], [x0 + s, y0 + s]]);
-    g.fillStyle = color; g.fillRect(x0 + b, y0 + b, s - 2 * b, s - 2 * b);
+    const faceX = x0 + b, faceY = y0 + b, faceSize = s - 2 * b;
+    g.fillStyle = color; g.fillRect(faceX, faceY, faceSize, faceSize);
+    g.drawImage(glossyTile(g, size), faceX, faceY, faceSize, faceSize);
     g.globalAlpha = 1;
   }
   function drawPiece(g, s, x, y, size, alpha = 1) {
@@ -94,6 +112,9 @@
   function render() {
     bestEl.textContent = "\uD83D\uDC51 " + shownBest;
     gemEl.hidden = streak < 1;
+    const comboTier = comboTierFor(streak);
+    boardCv.classList.toggle("combo-active", streak > 0);
+    boardCv.dataset.comboTier = String(comboTier);
     if (SHOW_STREAK_TEXT) infoEl.textContent = streak ? `MULTIPLIER x${1 + streak}  \u00B7  ${popped ? "SET SAFE" : "POP THIS SET"}` : "";
     if (displayedScore !== score || !scoreEl.textContent) animateScore(score);
     bx.clearRect(0, 0, SIZE, SIZE); bx.fillStyle = "#18254f"; bx.fillRect(0, 0, SIZE, SIZE);
@@ -135,10 +156,16 @@
     drawFx();
     drawTxt();
     tx.clearRect(0, 0, SIZE, TRAY_H);
+    const dealElapsed = trayDealAt ? performance.now() - trayDealAt : Infinity;
     pieces.forEach((s, i) => {
       if (!s || (drag && !drag.keyboard && drag.i === i)) return;
       const size = Math.min(28, 96 / Math.max(s.w, s.h));
-      drawPiece(tx, s, (i + 0.5) * SIZE / 3 - (s.w * size) / 2, TRAY_H / 2 - (s.h * size) / 2, size, fits(board, s) ? 1 : 0.3);
+      const progress = settings.reducedMotion ? 1 : Math.max(0, Math.min(1, (dealElapsed - i * 60) / 250));
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const fitAlpha = fits(board, s) ? 1 : 0.3;
+      tx.save(); tx.translate(0, -20 * (1 - eased));
+      drawPiece(tx, s, (i + 0.5) * SIZE / 3 - (s.w * size) / 2, TRAY_H / 2 - (s.h * size) / 2, size, fitAlpha * eased);
+      tx.restore();
       if (drag && drag.keyboard && drag.i === i) { tx.strokeStyle = "#fff"; tx.lineWidth = 2; tx.strokeRect(i * SIZE / 3 + 2, 2, SIZE / 3 - 4, TRAY_H - 4); }
     });
   }

@@ -117,7 +117,7 @@
       gameOverOverlay.hidden = false;
       if (!settings.reducedMotion) countFinalScore();
       gameOverButtonTimer = setTimeout(() => { playAgain.disabled = false; playAgain.focus(); }, 600);
-    }, 700);
+    }, settings.reducedMotion ? 100 : 700);
   }
   function hideStartScreen() {
     startOverlay.hidden = true;

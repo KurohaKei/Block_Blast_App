@@ -3,9 +3,13 @@
     return Number.isSafeInteger(saved) && saved >= 0 ? saved : 0;
   }
   let board, pieces, score, best = loadBest(), bestAtStart = best, shownBest = best, streak, popped, over, drag = null, ghost = null, stash = null, sets = 0;
-  let raf = 0, generationTimer = 0, generationPending = false;
+  let raf = 0, generationTimer = 0, generationPending = false, trayDealAt = 0;
 
-  const loop = () => { render(); raf = (drag || fx.length || txts.length) ? requestAnimationFrame(loop) : 0; };
+  const loop = () => {
+    render();
+    const dealActive = !settings.reducedMotion && trayDealAt && performance.now() - trayDealAt < 370;
+    raf = (drag || fx.length || txts.length || dealActive) ? requestAnimationFrame(loop) : 0;
+  };
   function resizeGhost() {
     if (!ghost || !drag || drag.keyboard) return;
     const s = pieces[drag.i], sc = scale(), w = s.w * CELL * sc, h = s.h * CELL * sc;
@@ -26,6 +30,7 @@
     if (over) return;
     over = true; generationPending = false; shownBest = best; clearSave();
     audioGameOver(); vibrate([60, 40, 60, 40, 120]);
+    startGameOverWave();
     showGameOver(); render();
   }
   function checkGameOver() {
@@ -37,6 +42,7 @@
       generationTimer = 0;
       if (!generationPending || over) return;
       pieces = generatePieces(board);
+      trayDealAt = performance.now();
       generationPending = false;
       checkGameOver();
       if (!over) saveGame();
@@ -47,24 +53,27 @@
     clearTimeout(generationTimer); generationTimer = 0; generationPending = false;
     hideGameOver(); clearSave();
     board = emptyBoard(); score = 0; bestAtStart = best; shownBest = best; streak = 0; popped = false; over = false;
-    drag = null; fx = []; txts = []; helpStreak = 0; stash = null; sets = 0;
+    drag = null; fx = []; txts = []; helpStreak = 0; stash = null; sets = 0; trayDealAt = 0;
     if (ghost) { ghost.remove(); ghost = null; }
     pieces = generatePieces(board);
+    trayDealAt = performance.now();
     render();
+    if (!raf) loop();
   }
   function place(i, r, c) {
     if (over || generationPending || !pieces[i] || !canPlace(board, pieces[i], r, c)) return;
     const s = pieces[i], mult = 1 + streak;
     const res = applyMove(board, s, r, c);
     board = res.board;
-    if (res.lines > 0) startFx(res);
+    startPlacementFx(s, r, c, res);
     const linePoints = (10 + 5 * Math.floor(mult / 5)) * mult;
     const clear = isEmpty(board);
     const popPoints = res.lines * linePoints * (clear ? 2 : 1);
     score += s.cells.length + popPoints;
-    if (res.lines > 0) { streak++; popped = true; }
-    if (res.lines > 0) startText(res, popPoints, mult >= 2 ? streak : 0, clear);
-    feedbackPlace(res.lines);
+    if (res.lines > 0) { streak++; popped = true; startFx(res, comboTierFor(streak), streak); }
+    if (clear) startPerfectFx();
+    if (res.lines > 0) startText(res, popPoints, mult >= 2 ? streak : 0, clear, res.lines);
+    feedbackPlace(res.lines, streak, clear);
     pieces[i] = null;
     if (score > best) { best = score; localSet("bb_best", best); }
     if (pieces.every(piece => !piece)) {
@@ -80,7 +89,7 @@
     render(); if (!raf) loop();
   }
   trayCv.onpointerdown = e => {
-    if (over || settingsOpen || !startOverlay.hidden || generationPending) return;
+    if (e.isPrimary === false || e.button !== 0 || over || settingsOpen || !startOverlay.hidden || generationPending) return;
     const sc = trayCv.getBoundingClientRect().width / SIZE, i = Math.min(2, Math.floor(((e.clientX - trayCv.getBoundingClientRect().left) / sc) / (SIZE / 3)));
     if (!pieces[i]) return;
     unlockAudio(); audioPick();
@@ -93,6 +102,7 @@
   trayCv.onpointermove = e => { if (!drag || drag.keyboard) return; drag.x = e.clientX; drag.y = e.clientY; moveGhost(); };
   trayCv.onpointerup = () => endDrag(true);
   trayCv.onpointercancel = () => endDrag(false);
+  trayCv.onlostpointercapture = () => endDrag(false);
   gear.setAttribute("aria-haspopup", "dialog");
 
   document.addEventListener("keydown", e => {
