@@ -1,5 +1,5 @@
 // ---------- Tuning ----------
-  const DEBUG_GEN = true;            // set to false to silence the console logs
+  const DEBUG_GEN = false;            // set to false to silence the console logs
   const SET_TRIES = 15;              // attempts to build a valid set before moving to the next path
 
   // Duplicate penalties (multiplied onto a piece's weight when building slots)

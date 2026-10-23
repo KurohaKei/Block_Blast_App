@@ -1,7 +1,7 @@
   const SHOW_STREAK_TEXT = false;
   const make = (tag, style, text) => { const e = document.createElement(tag); e.style.cssText = style; if (text) e.textContent = text; return e; };
   document.body.style.cssText = "margin:0;background:var(--page-background,#3b578e);overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;";
-  const page = make("div", "width:min(calc(94vw - 14px),506px,max(166px,calc(72.73vh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73svh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73dvh - 115px)));height:100vh;height:100svh;height:100dvh;min-height:0;margin:auto;padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);justify-items:center;align-items:center;font-family:sans-serif;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none;");
+  const page = make("div", "width:min(calc(94vw - 14px),506px,max(166px,calc(72.73vh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73svh - 115px)));width:min(calc(94vw - 14px),506px,max(166px,calc(72.73dvh - 115px)));height:100vh;height:100svh;height:100dvh;min-height:0;margin:auto;padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-rows:auto minmax(0,1fr);justify-items:center;align-items:center;font-family:sans-serif;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none;");
   document.body.appendChild(page);
   const bar = make("div", "width:100%;flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;font-weight:bold;font-size:22px;");
   const bestEl = make("div", "display:flex;align-items:center;gap:7px;color:var(--accent);");
@@ -30,13 +30,12 @@
   const boardCv = make("canvas", "width:100%;height:auto;aspect-ratio:1;border-radius:14px;background:var(--board-bg);touch-action:none;");
   boardCv.className = "board";
   const trayCv = make("canvas", "width:100%;height:auto;flex:0 0 auto;aspect-ratio:8/3;touch-action:none;");
-  const topPanel = make("div", "width:100%;display:flex;flex-direction:column;gap:4px;align-self:end;");
+  const topPanel = make("div", "width:100%;display:flex;flex-direction:column;gap:4px;align-self:start;");
   topPanel.append(bar, updateStatus, scoreWrap);
   if (SHOW_STREAK_TEXT) topPanel.append(infoEl);
-  const trayPanel = make("div", "width:100%;align-self:end;");
-  trayPanel.appendChild(trayCv);
-  page.append(topPanel);
-  page.append(boardCv, trayPanel);
+  const playArea = make("div", "width:100%;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transform:translateY(-min(12.5vw,63.25px));");
+  playArea.append(boardCv, trayCv);
+  page.append(topPanel, playArea);
   const bx = boardCv.getContext("2d"), tx = trayCv.getContext("2d");
   function resizeCanvas(canvas, logicalW, logicalH) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
