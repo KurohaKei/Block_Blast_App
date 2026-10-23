@@ -6,7 +6,13 @@ The game uses an 8x8 board and gives you three pieces at a time. Piece choices a
 
 ## Run the game
 
-Open `index.html` in a modern browser. No install or server is required.
+Open `index.html` in a modern browser to play without installing anything. Browser-based offline installation requires serving the app from HTTPS or localhost; service workers do not work from a `file://` URL.
+
+## Deploy to Vercel
+
+This project is a static front-end and can be deployed directly to Vercel without a build step. Push the repository to GitHub, import it into Vercel, and keep the project root as the app directory. No custom build command is required because the app is served straight from the static files in the repository.
+
+After opening the deployed site once while online, wait for the service worker to cache the game files. Then use your browser's **Install app** or **Add to Home Screen** option. The installed game can launch offline; updating it requires reconnecting to the internet.
 
 ## Play
 

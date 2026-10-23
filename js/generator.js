@@ -1,5 +1,5 @@
 // ---------- Tuning ----------
-  const DEBUG_GEN = true;            // set to false to silence the console logs
+  const DEBUG_GEN = false;           // set to true during local debugging; keep off in production builds
   const ASSIST_MAX = 0.90;           // was 0.85
   const MID_SETS = 3;
   const SPARSE_CELLS_1 = 24, SPARSE_ASSIST_1 = 0.45;

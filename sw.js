@@ -1,5 +1,6 @@
-const CACHE_NAME = "block-blast-v2";
+const CACHE_NAME = "block-blast-v3";
 const ASSETS = [
+  "./",
   "./index.html",
   "./styles.css",
   "./game.js",
@@ -12,6 +13,9 @@ const ASSETS = [
   "./js/overlay.js",
   "./js/storage.js",
   "./manifest.json",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/apple-touch-icon.png",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg"
 ];
