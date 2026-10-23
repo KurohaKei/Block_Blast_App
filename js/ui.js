@@ -1,0 +1,147 @@
+  const SHOW_STREAK_TEXT = false;
+  const make = (tag, style, text) => { const e = document.createElement(tag); e.style.cssText = style; if (text) e.textContent = text; return e; };
+  document.body.style.cssText = "margin:0;background:#3b578e;overscroll-behavior:none;touch-action:none;user-select:none;";
+  const page = make("div", "width:min(calc(94vw - 14px),506px,max(166px,calc(72.73dvh - 115px)));height:100vh;height:100dvh;min-height:0;margin:auto;padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;font-family:sans-serif;color:#fff;user-select:none;touch-action:none;");
+  document.body.appendChild(page);
+  const bar = make("div", "width:100%;flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;font-weight:bold;font-size:22px;");
+  const bestEl = make("div", "display:flex;align-items:center;gap:7px;color:#ffbd32;");
+  const gear = make("button", "font-size:26px;background:none;border:none;color:#a9d9f6;cursor:pointer;", "\u2699");
+  gear.setAttribute("aria-label", "Settings");
+  const scoreWrap = make("div", "position:relative;flex:0 0 auto;min-height:clamp(54px,12vh,78px);display:grid;place-items:center;isolation:isolate;");
+  const gemEl = make("div", "position:absolute;z-index:-1;width:62px;height:62px;background:#29d6cf;clip-path:polygon(50% 0,94% 28%,78% 88%,50% 100%,22% 88%,6% 28%);opacity:.35;filter:drop-shadow(0 0 14px currentColor);");
+  gemEl.className = "score-gem";
+  const scoreEl = make("div", "position:relative;font-size:clamp(42px,12vw,62px);line-height:1;font-weight:800;font-variant-numeric:tabular-nums;text-shadow:0 2px 8px rgba(0,0,0,.24);");
+  const infoEl = SHOW_STREAK_TEXT ? make("div", "flex:0 0 auto;font-size:14px;color:#ffe067;height:18px;") : null;
+  scoreWrap.append(gemEl, scoreEl);
+  bar.append(bestEl, gear);
+  const boardCv = make("canvas", "width:100%;height:auto;aspect-ratio:1;border-radius:14px;background:#18254f;touch-action:none;box-shadow:0 0 0 7px #7286b3,0 8px 24px rgba(9,19,45,.22);");
+  boardCv.className = "board";
+  const trayCv = make("canvas", "width:100%;height:auto;flex:0 0 auto;aspect-ratio:8/3;touch-action:none;");
+  page.append(bar, scoreWrap);
+  if (SHOW_STREAK_TEXT) page.append(infoEl);
+  page.append(boardCv, trayCv);
+  const bx = boardCv.getContext("2d"), tx = trayCv.getContext("2d");
+  function resizeCanvas(canvas, logicalW, logicalH) {
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    canvas.width = Math.round(logicalW * dpr); canvas.height = Math.round(logicalH * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return ctx;
+  }
+  function resizeCanvases() {
+    resizeCanvas(boardCv, SIZE, SIZE); resizeCanvas(trayCv, SIZE, TRAY_H);
+    if (ghost) resizeGhost();
+    render();
+  }
+  const scale = () => boardCv.getBoundingClientRect().width / SIZE;
+  let displayedScore = 0, scoreTarget = 0, scoreFrom = 0, scoreStart = 0, scoreRaf = 0;
+  function animateScore(value) {
+    if (settings.reducedMotion) {
+      scoreTarget = value; displayedScore = value; scoreEl.textContent = String(value);
+      cancelAnimationFrame(scoreRaf); scoreRaf = 0; gemEl.classList.remove("pulse"); return;
+    }
+    if (scoreTarget === value && scoreEl.textContent) return;
+    scoreTarget = value;
+    gemEl.classList.remove("pulse");
+    void gemEl.offsetWidth;
+    gemEl.classList.add("pulse");
+    const milestone = Math.floor(value / 1000);
+    gemEl.classList.toggle("milestone", milestone % 2 === 1);
+    scoreFrom = displayedScore; scoreStart = performance.now();
+    cancelAnimationFrame(scoreRaf);
+    const tick = now => {
+      const p = Math.min(1, (now - scoreStart) / 300);
+      displayedScore = Math.round(scoreFrom + (scoreTarget - scoreFrom) * (1 - Math.pow(1 - p, 3)));
+      scoreEl.textContent = String(displayedScore);
+      if (p < 1) scoreRaf = requestAnimationFrame(tick);
+      else { displayedScore = scoreTarget; scoreRaf = 0; }
+    };
+    scoreRaf = requestAnimationFrame(tick);
+  }
+
+ 
+  const shade = (hex, amt) => {
+    const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, v + amt));
+    return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+  };
+  const rgbOf = hex => { const n = parseInt(hex.slice(1), 16); return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`; };
+  function cell(g, x, y, size, color, alpha = 1) {
+    const x0 = x + 1, y0 = y + 1, s = size - 2, b = Math.max(2, s * 0.14);
+    const face = (c, pts) => { g.fillStyle = c; g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); g.closePath(); g.fill(); };
+    g.globalAlpha = alpha;
+    face(shade(color, 70), [[x0, y0], [x0 + s, y0], [x0 + s - b, y0 + b], [x0 + b, y0 + b]]);
+    face(shade(color, 35), [[x0, y0], [x0 + b, y0 + b], [x0 + b, y0 + s - b], [x0, y0 + s]]);
+    face(shade(color, -35), [[x0 + s, y0], [x0 + s, y0 + s], [x0 + s - b, y0 + s - b], [x0 + s - b, y0 + b]]);
+    face(shade(color, -70), [[x0, y0 + s], [x0 + b, y0 + s - b], [x0 + s - b, y0 + s - b], [x0 + s, y0 + s]]);
+    g.fillStyle = color; g.fillRect(x0 + b, y0 + b, s - 2 * b, s - 2 * b);
+    g.globalAlpha = 1;
+  }
+  function drawPiece(g, s, x, y, size, alpha = 1) {
+    s.cells.forEach(([r, c]) => cell(g, x + c * size, y + r * size, size, s.color, alpha));
+  }
+  const target = () => {
+    if (drag.keyboard) return { r: drag.r, c: drag.c };
+    const s = pieces[drag.i], b = boardCv.getBoundingClientRect(), sc = scale();
+    return { r: Math.round(((drag.y - LIFT * sc - b.top - boardCv.clientTop) / sc - (s.h * CELL) / 2) / CELL), c: Math.round(((drag.x - b.left - boardCv.clientLeft) / sc - (s.w * CELL) / 2) / CELL) };
+  };
+
+  const R = [...Array(N).keys()];
+  function previewLines(s, r, c) {
+    const filled = (y, x) => board[y][x] || s.cells.some(([dr, dc]) => r + dr === y && c + dc === x);
+    return { rows: R.filter(y => R.every(x => filled(y, x))), cols: R.filter(x => R.every(y => filled(y, x))) };
+  }
+
+  function render() {
+    bestEl.textContent = "\uD83D\uDC51 " + shownBest;
+    gemEl.hidden = streak < 1;
+    if (SHOW_STREAK_TEXT) infoEl.textContent = streak ? `MULTIPLIER x${1 + streak}  \u00B7  ${popped ? "SET SAFE" : "POP THIS SET"}` : "";
+    if (displayedScore !== score || !scoreEl.textContent) animateScore(score);
+    bx.clearRect(0, 0, SIZE, SIZE); bx.fillStyle = "#18254f"; bx.fillRect(0, 0, SIZE, SIZE);
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if (board[r][c]) cell(bx, c * CELL, r * CELL, CELL, board[r][c]);
+      else { bx.fillStyle = "#202d59"; bx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); bx.strokeStyle = "rgba(140,165,215,.12)"; bx.lineWidth = 0.7; bx.strokeRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); }
+    }
+    if (drag) {
+      const s = pieces[drag.i], { r, c } = target();
+      if (canPlace(board, s, r, c)) {
+        const pop = previewLines(s, r, c), isPop = (y, x) => pop.rows.includes(y) || pop.cols.includes(x);
+        s.cells.forEach(([dr, dc]) => cell(bx, (c + dc) * CELL, (r + dr) * CELL, CELL, s.color, isPop(r + dr, c + dc) ? 1 : 0.7));
+        if (pop.rows.length + pop.cols.length) {
+          const t = settings.reducedMotion ? 0 : performance.now() / 1000, gc = rgbOf(s.color);
+          const glow = (y, x, k) => {
+            const wave = settings.reducedMotion ? 0.5 : Math.pow(0.5 + 0.5 * Math.sin(k * 0.9 - t * 7), 3);
+            bx.fillStyle = `rgba(${gc}, ${0.16 + 0.4 * wave})`; bx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+          };
+          bx.globalCompositeOperation = "screen";
+          pop.rows.forEach(y => R.forEach(x => glow(y, x, x)));
+          pop.cols.forEach(x => R.forEach(y => glow(y, x, y)));
+          bx.globalCompositeOperation = "source-over";
+          bx.strokeStyle = `rgba(${gc}, ${settings.reducedMotion ? 0.8 : 0.7 + 0.3 * Math.sin(t * 6)})`; bx.lineWidth = 2; bx.shadowColor = `rgb(${gc})`; bx.shadowBlur = 10;
+          pop.rows.forEach(y => bx.strokeRect(1, y * CELL + 1, SIZE - 2, CELL - 2));
+          pop.cols.forEach(x => bx.strokeRect(x * CELL + 1, 1, CELL - 2, SIZE - 2));
+          bx.shadowBlur = 0;
+        }
+      } else {
+        bx.save(); bx.fillStyle = "rgba(255, 70, 70, 0.18)"; bx.strokeStyle = "rgba(255, 100, 100, 0.75)";
+        s.cells.forEach(([dr, dc]) => {
+          const y = r + dr, x = c + dc;
+          if (y < 0 || y >= N || x < 0 || x >= N) return;
+          bx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+          bx.strokeRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+        });
+        bx.restore();
+      }
+    }
+    drawFx();
+    drawTxt();
+    tx.clearRect(0, 0, SIZE, TRAY_H);
+    pieces.forEach((s, i) => {
+      if (!s || (drag && !drag.keyboard && drag.i === i)) return;
+      const size = Math.min(28, 96 / Math.max(s.w, s.h));
+      drawPiece(tx, s, (i + 0.5) * SIZE / 3 - (s.w * size) / 2, TRAY_H / 2 - (s.h * size) / 2, size, fits(board, s) ? 1 : 0.3);
+      if (drag && drag.keyboard && drag.i === i) { tx.strokeStyle = "#fff"; tx.lineWidth = 2; tx.strokeRect(i * SIZE / 3 + 2, 2, SIZE / 3 - 4, TRAY_H - 4); }
+    });
+  }
+
+  resizeCanvas(boardCv, SIZE, SIZE);
+  resizeCanvas(trayCv, SIZE, TRAY_H);
