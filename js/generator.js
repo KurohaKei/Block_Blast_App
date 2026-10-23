@@ -1,27 +1,10 @@
 // ---------- Tuning ----------
-  const DEBUG_GEN = false;           // set to true during local debugging; keep off in production builds
-  const ASSIST_MAX = 0.90;           // was 0.85
-  const MID_SETS = 3;
-  const SPARSE_CELLS_1 = 24, SPARSE_ASSIST_1 = 0.45;
-  const SPARSE_CELLS_2 = 16, SPARSE_ASSIST_2 = 0.7;
-  const BEAM = 4;
-  const HOLE_MIN = 4, HOLE_MAX = 9;
-  const PERFECT_CELLS = 25;
-  const PERFECT_TRIES = 60;
-  const PERFECT_CHANCE = 0.35;       // was 0.25
-  const CARRY_CHANCE = 0.15;
+  const DEBUG_GEN = true;            // set to false to silence the console logs
+  const SET_TRIES = 15;              // attempts to build a valid set before moving to the next path
 
-  // Sequential set builder
-  const HELP_SHARE_CAP = 0.5;        // max share of a helped slot's pool going to boosted pieces
-  const BOOST_MIN_CELLS = 4;         // smaller pieces get no clear/hole boost (unless crisis)
-  const CLEAR_BOOST_1 = 3;           // best placement clears 1 line
-  const CLEAR_BOOST_2 = 4.5;         // best placement clears 2+ lines
-  const OVERHANG_SOFTEN = 0.15;      // boost shrinks as cells left on the board grow
-  const HOLE_FIT_BOOST = 2.5;        // piece exactly fills an enclosed hole (4+ cells)
+  // Duplicate penalties (multiplied onto a piece's weight when building slots)
   const DUP_SAME_SHAPE = 0.1;        // same orientation already in this set
   const DUP_SAME_BASE = 0.4;         // same base shape, other rotation, already in this set
-  const HELP_P_MIN = 0.25, HELP_P_SPAN = 0.6;  // per-slot help chance = MIN + SPAN * assist (MIN was 0.2)
-  const SET_TRIES = 15;
 
   // Solvability guarantee: on a busy board the set must clear at least one line in the simulation.
   // If slot 1 clears nothing, slot 2 must clear or set up a clear, and slot 3 must clear.
@@ -31,7 +14,13 @@
   // Line-perfect checker (runs before the normal builder)
   const PERFECT_LINE_CHANCE = 1;     // chance a found line-perfect is used (1 = always)
   const PERFECT_MAX_SPAN = 2;        // a 1-line perfect may span at most this many lines across the cleared line
+  const PERFECT_PAIR_CHANCE = 1;     // chance a found 2-block perfect is used (1 = always); checked before the 1-block perfects
+  const PERFECT_PAIR_MAX_CELLS = 12; // a 2-block perfect only looks at two-line strips with at most this many empty cells
+  const PERFECT_LINEPAIR_CHANCE = 0.8;    // chance a found 1-line pair is used; checked after the line-perfect
+  const PERFECT_LINEPAIR_MAX_CELLS = 7;   // a 1-line pair only looks at lines with at most this many empty cells
+  const PERFECT_LINE_THEN_2BLOCK_CHANCE = 0.8;   // after a line-perfect in slot 1, chance slots 2-3 become a 2-block perfect (checked before the slot 2 line-perfect chain)
   const PERFECT_CHAIN_CHANCE = 1;    // chance slot 2 also gets a line-perfect, checked on the board after slot 1 pops (1 = always)
+  const PERFECT_CHAIN3_CHANCE = 0.8; // chance slot 3 also gets a line-perfect, checked on the board after slot 2 pops (only if slot 2 was perfect)
 
   // Zigzag -> matching L4 pair (boosts those L4s in later slots of the same set)
   const ZIG_L_BOOST = 1.5;                    // modest multiplier on the L4's base weight
@@ -43,19 +32,11 @@
     "zigzag4-90-mirror": ["L4-0-mirror", "L4-180-mirror"]
   };
 
-  // Crowded board: affects the FIRST slot only
-  const CROWD_START = 0.55, CROWD_FULL = 0.85; // board fill range mapped to crowd 0..1
-  const CRISIS_BOOST = 2;            // clear boost multiplier grows by this * crowd
-  const CRISIS_CAP_EXTRA = 0.3;      // share cap grows by this * crowd (0.5 -> 0.8)
-  const CRISIS_SMALL_OK = 0.7;       // at this crowd, small pieces can get the clear boost too
-
-  let helpStreak = 0;
   SHAPES.forEach(s => { s.m = Array(s.h).fill(0); s.cells.forEach(([r, c]) => (s.m[r] |= 1 << c)); });
   const POP = Array.from({ length: 256 }, (_, v) => v.toString(2).replace(/0/g, "").length);
 
   // ---------- Helpers ----------
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const rectCells = (h, w) => { const cs = []; for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) cs.push([r, c]); return cs; };
   const weightedPick = (options, getWeight = option => option.baseWeight) => {
     if (!options.length) return null;
     const weights = options.map(option => {
@@ -70,8 +51,6 @@
     }
     return options[options.length - 1];
   };
-  const shapeFor = cells => weightedPick((BY_KEY.get(cellsKey(cells)) || []).filter(s => s.baseWeight > 0));
-  const smallCount = set => set.filter(s => s.cells.length < MIN_CELLS).length;
   const easyOpening = set => sets > 2 || set.every(s => s.cells.length <= 6) && set.filter(s => s.cells.length <= 4).length >= 2;
   const toMask = b => Uint8Array.from(b, row => row.reduce((m, v, c) => m | (v ? 1 << c : 0), 0));
 
@@ -87,48 +66,6 @@
     }
     return set;
   };
-
-  function tileRect(h, w) {
-    if (h * w < HOLE_MIN) return null;
-    const whole = shapeFor(rectCells(h, w));
-    if (whole) return [whole];
-    const halves = [];
-    if (w % 2 === 0) halves.push([h, w / 2]);
-    if (h % 2 === 0) halves.push([h / 2, w]);
-    for (const [a, e] of shuffle(halves)) {
-      const part = tileRect(a, e);
-      if (part && part.length * 2 <= 3) return [...part, ...part];
-    }
-    return null;
-  }
-
-  // Enclosed empty regions (4+ cells) and the shapes that would fill them exactly.
-  function holeGroups(b) {
-    const seen = Array.from({ length: N }, () => Array(N).fill(false)), out = [];
-    for (let r0 = 0; r0 < N; r0++) for (let c0 = 0; c0 < N; c0++) {
-      if (b[r0][c0] || seen[r0][c0]) continue;
-      const hole = [], stack = [[r0, c0]];
-      seen[r0][c0] = true;
-      while (stack.length) {
-        const [r, c] = stack.pop(); hole.push([r, c]);
-        for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const rr = r + dr, cc = c + dc;
-          if (rr >= 0 && rr < N && cc >= 0 && cc < N && !b[rr][cc] && !seen[rr][cc]) { seen[rr][cc] = true; stack.push([rr, cc]); }
-        }
-      }
-      if (hole.length < HOLE_MIN) continue;
-      const mr = Math.min(...hole.map(x => x[0])), mc = Math.min(...hole.map(x => x[1]));
-      const bh = Math.max(...hole.map(x => x[0])) - mr + 1, bw = Math.max(...hole.map(x => x[1])) - mc + 1;
-      if (hole.length === bh * bw) {
-        const t = tileRect(bh, bw);
-        if (t) out.push(t);
-      } else if (hole.length <= HOLE_MAX) {
-        const m = shapeFor(hole.map(([r, c]) => [r - mr, c - mc]));
-        if (m) out.push([m]);
-      }
-    }
-    return out;
-  }
 
   // ---------- Bitmask simulation ----------
   function simFits(g, s, r, c) {
@@ -154,33 +91,6 @@
     return n;
   }
 
-  // Can this set clear the whole board in some order? (used by the perfect-clear paths)
-  function evaluate(b, set) {
-    let best = null;
-    const used = [false, false, false];
-    const go = (g, n, lines, perfect) => {
-      if (n === set.length) {
-        const score = lines * 10 - rough(g) * 0.3 + (perfect ? 100 : 0);
-        if (!best || score > best.score) best = { score, perfect };
-        return;
-      }
-      for (let i = 0; i < set.length; i++) {
-        if (used[i]) continue;
-        const s = set[i], opts = [];
-        for (let r = 0; r <= N - s.h; r++) for (let c = 0; c <= N - s.w; c++) {
-          if (!simFits(g, s, r, c)) continue;
-          const o = simDrop(g, s, r, c); o.rough = rough(o.g); opts.push(o);
-        }
-        opts.sort((a, z) => (z.left === 0) - (a.left === 0) || z.lines - a.lines || a.rough - z.rough);
-        used[i] = true;
-        for (let k = 0; k < Math.min(BEAM, opts.length); k++) go(opts[k].g, n + 1, lines + opts[k].lines, perfect || opts[k].left === 0);
-        used[i] = false;
-      }
-    };
-    go(toMask(b), 0, 0, false);
-    return best;
-  }
-
   // ---------- Line-perfect checker ----------
   // Looks at every placement of every piece on the real board and keeps the ones that clear lines:
   //   - clears 2+ lines: always allowed (the piece may stick out into a third line)
@@ -192,7 +102,9 @@
   // avoid: shape ids already in the set (used when checking slot 2 so it doesn't repeat slot 1).
   const isSmallShape = s => s.cells.length < MIN_CELLS || s.base.startsWith("diagonal");
 
-  function findLinePerfect(b, avoid = []) {
+  // allowSmall: used for the chained slots 2 and 3. Small pieces (1x2, 1x3, small L, ...) compete on equal
+  // terms with big ones instead of being a last resort. Only the 1x1 stays excluded.
+  function findLinePerfect(b, avoid = [], allowSmall = false) {
     const g = toMask(b);
     let colsUsed = 0;
     for (let i = 0; i < N; i++) colsUsed |= g[i];
@@ -200,6 +112,7 @@
     for (const s of SHAPES) {
       if (s.baseWeight <= 0 || (sets <= 2 && s.cells.length > 6)) continue;
       if (avoid.includes(s.id)) continue;   // don't repeat a piece already in this set
+      if (allowSmall && s.cells.length < 2) continue;   // never the 1x1
       for (let r = 0; r <= N - s.h; r++) for (let c = 0; c <= N - s.w; c++) {
         if (!simFits(g, s, r, c)) continue;
         const ng = g.slice();
@@ -220,7 +133,9 @@
       }
     }
     if (!cands.length) return null;
-    const key = o => [-o.lines, o.small ? 1 : 0, o.small ? -o.s.cells.length : 0, o.empty, o.left];
+    const key = o => allowSmall
+      ? [-o.lines, 0, 0, o.empty, o.left]   // no size preference: big and small compete equally
+      : [-o.lines, o.small ? 1 : 0, o.small ? -o.s.cells.length : 0, o.empty, o.left];
     const cmp = (a, z) => {
       const ka = key(a), kz = key(z);
       for (let i = 0; i < ka.length; i++) if (ka[i] !== kz[i]) return ka[i] - kz[i];
@@ -233,18 +148,155 @@
     return spots[Math.floor(Math.random() * spots.length)];
   }
 
-  function assistLevel(b) {
-    const cells = filledCells(b);
-    const fill = cells / (N * N);
-    const byFill = Math.min(1, Math.max(0, (fill - 0.2) / 0.4));
-    const sparse = sets <= MID_SETS ? 0 : cells >= 1 && cells <= SPARSE_CELLS_2 ? SPARSE_ASSIST_2 : cells <= SPARSE_CELLS_1 ? SPARSE_ASSIST_1 : 0;
-    return Math.max(ASSIST_MAX * byFill, sparse);
+  // ---------- 2-block perfect ----------
+  // Two pieces that together clear 2 consecutive lines (2 rows or 2 columns) with no stick outs:
+  // every cell of both pieces lies inside the two lines, so nothing is left behind after the pop.
+  // For every pair of consecutive lines, the empty cells of the strip must be covered exactly by two pieces.
+  // The pair is checked in the simulation (slot 1 then slot 2). After both pieces are placed and popped,
+  // the strip itself must be completely empty. This catches fake pairs, e.g. slot 1 clearing a row AND a
+  // crossing column, which would punch a new hole into the strip so slot 2 no longer finishes it.
+  // 1x1 pieces are not used.
+  // Ranking: no duplicate shape first, then fewest small pieces (cells < MIN_CELLS or diagonal). Ties are random.
+  // Returns [first, second], each {s, r, c, lines, pair: true}, or null.
+  // avoid: shape ids already in the set (used when it is checked after slot 1, so it doesn't repeat slot 1).
+  function findTwoBlockPerfect(b, avoid = []) {
+    const g = toMask(b);
+    const empty = (r, c) => !((g[r] >> c) & 1);
+    const shapes = SHAPES.filter(s => s.baseWeight > 0 && s.cells.length >= 2 && !avoid.includes(s.id) && !(sets <= 2 && s.cells.length > 6));
+    const cands = [];
+
+    // isRow: the strip is rows i and i+1; otherwise columns i and i+1
+    const tryStrip = (E, isRow, i) => {
+      if (E.length < 4 || E.length > PERFECT_PAIR_MAX_CELLS) return;
+      const inE = new Set(E.map(([r, c]) => r * N + c));
+      for (const s1 of shapes) {
+        if (s1.cells.length >= E.length) continue;
+        for (let r = 0; r <= N - s1.h; r++) for (let c = 0; c <= N - s1.w; c++) {
+          if (!s1.cells.every(([di, dj]) => inE.has((r + di) * N + (c + dj)))) continue;
+          const used = new Set(s1.cells.map(([di, dj]) => (r + di) * N + (c + dj)));
+          const rest = E.filter(([rr, cc]) => !used.has(rr * N + cc));
+          const mr = Math.min(...rest.map(x => x[0])), mc = Math.min(...rest.map(x => x[1]));
+          const norm = rest.map(([rr, cc]) => [rr - mr, cc - mc]).sort((a, z) => a[0] - z[0] || a[1] - z[1]);
+          const seconds = (BY_KEY.get(cellsKey(norm)) || []).filter(s => shapes.includes(s));
+          for (const s2 of seconds) {
+            if (!simFits(g, s1, r, c)) continue;
+            const o1 = simDrop(g, s1, r, c);
+            if (!simFits(o1.g, s2, mr, mc)) continue;
+            const o2 = simDrop(o1.g, s2, mr, mc);
+            // the strip must be fully cleared after both pieces
+            const clean = isRow
+              ? o2.g[i] === 0 && o2.g[i + 1] === 0
+              : o2.g.every(row => (row & (3 << i)) === 0);
+            if (!clean) continue;
+            cands.push({
+              first: { s: s1, r, c, lines: o1.lines, pair: true },
+              second: { s: s2, r: mr, c: mc, lines: o2.lines, pair: true },
+              smalls: isSmallShape(s1) + isSmallShape(s2),
+              dup: s1.id === s2.id ? 1 : 0
+            });
+          }
+        }
+      }
+    };
+
+    for (let i = 0; i < N - 1; i++) {   // two consecutive rows
+      const E = [];
+      for (const r of [i, i + 1]) for (let c = 0; c < N; c++) if (empty(r, c)) E.push([r, c]);
+      tryStrip(E, true, i);
+    }
+    for (let j = 0; j < N - 1; j++) {   // two consecutive columns
+      const E = [];
+      for (const c of [j, j + 1]) for (let r = 0; r < N; r++) if (empty(r, c)) E.push([r, c]);
+      tryStrip(E, false, j);
+    }
+    if (!cands.length) return null;
+    const key = o => [o.dup, o.smalls];
+    const cmp = (a, z) => { const ka = key(a), kz = key(z); return ka[0] - kz[0] || ka[1] - kz[1]; };
+    cands.sort(cmp);
+    const top = cands.filter(o => cmp(o, cands[0]) === 0);
+    const pick = top[Math.floor(Math.random() * top.length)];
+    return [pick.first, pick.second];
   }
 
-  const crowdLevel = b => {
-    const fill = filledCells(b) / (N * N);
-    return Math.min(1, Math.max(0, (fill - CROWD_START) / (CROWD_FULL - CROWD_START)));
-  };
+  // ---------- 1-line pair ----------
+  // Two pieces that together clear ONE line (a row or a column) when neither piece can clear it alone.
+  // This covers boards where no single piece clears a line, so the line-perfect checker finds nothing.
+  // For every line with 2..PERFECT_LINEPAIR_MAX_CELLS empty cells, the first piece must fill some of them
+  // (without clearing anything by itself), and the second piece must fill the rest. Each piece may span at
+  // most PERFECT_MAX_SPAN lines across the target line, so nothing reaches a third line.
+  // The pair is checked in the simulation (slot 1 then slot 2) and the target line must be cleared after both.
+  // 1x1 pieces are not used.
+  // Ranking: no duplicate shape first, then pairs that stick out of the line (at least 1 cell) before clean
+  // pairs, then fewest small pieces. A clean pair is still used if nothing else exists.
+  // Ties are random, so the amount sticking out is not pushed to the maximum. Returns [first, second], each {s, r, c, lines, pair: true}, or null.
+  function findOneLinePair(b) {
+    const g = toMask(b);
+    const empty = (r, c) => !((g[r] >> c) & 1);
+    const shapes = SHAPES.filter(s => s.baseWeight > 0 && s.cells.length >= 2 && !(sets <= 2 && s.cells.length > 6));
+    const cands = [];
+
+    // isRow: the target line is row i; otherwise column i
+    const tryLine = (E, isRow, i) => {
+      if (E.length < 2 || E.length > PERFECT_LINEPAIR_MAX_CELLS) return;
+      const inE = new Set(E.map(([r, c]) => r * N + c));
+      const span = s => (isRow ? s.h : s.w);
+      for (const s1 of shapes) {
+        if (span(s1) > PERFECT_MAX_SPAN) continue;
+        for (let r = 0; r <= N - s1.h; r++) for (let c = 0; c <= N - s1.w; c++) {
+          if (!simFits(g, s1, r, c)) continue;
+          const inside = s1.cells.filter(([di, dj]) => inE.has((r + di) * N + (c + dj)));
+          if (!inside.length) continue;   // must help fill the line
+          const o1 = simDrop(g, s1, r, c);
+          if (o1.lines > 0) continue;     // clears on its own: that is the line-perfect's job
+          const used = new Set(inside.map(([di, dj]) => (r + di) * N + (c + dj)));
+          const rest = E.filter(([rr, cc]) => !used.has(rr * N + cc));
+          const [r0, c0] = rest[0];
+          for (const s2 of shapes) {
+            if (span(s2) > PERFECT_MAX_SPAN) continue;
+            for (const [di, dj] of s2.cells) {   // s2 must cover the first remaining empty cell
+              const r2 = r0 - di, c2 = c0 - dj;
+              if (r2 < 0 || c2 < 0 || r2 > N - s2.h || c2 > N - s2.w) continue;
+              if (!simFits(o1.g, s2, r2, c2)) continue;
+              const o2 = simDrop(o1.g, s2, r2, c2);
+              const cleared = isRow ? o2.g[i] === 0 : o2.g.every(row => !((row >> i) & 1));
+              if (!cleared) continue;
+              cands.push({
+                first: { s: s1, r, c, lines: o1.lines, pair: true },
+                second: { s: s2, r: r2, c: c2, lines: o2.lines, pair: true },
+                smalls: isSmallShape(s1) + isSmallShape(s2),
+                dup: s1.id === s2.id ? 1 : 0,
+                outside: s1.cells.length + s2.cells.length - E.length   // cells that stick out of the line
+              });
+            }
+          }
+        }
+      }
+    };
+
+    for (let i = 0; i < N; i++) {   // every row
+      const E = [];
+      for (let c = 0; c < N; c++) if (empty(i, c)) E.push([i, c]);
+      tryLine(E, true, i);
+    }
+    for (let j = 0; j < N; j++) {   // every column
+      const E = [];
+      for (let r = 0; r < N; r++) if (empty(r, j)) E.push([r, j]);
+      tryLine(E, false, j);
+    }
+    if (!cands.length) return null;
+    // no duplicate first, then pairs that stick out before clean pairs (clean ones are only a fallback),
+    // then fewest small pieces. Among the rest the pick is random, so the amount sticking out varies
+    const key = o => [o.dup, o.outside > 0 ? 0 : 1, o.smalls];
+    const cmp = (a, z) => {
+      const ka = key(a), kz = key(z);
+      for (let i = 0; i < ka.length; i++) if (ka[i] !== kz[i]) return ka[i] - kz[i];
+      return 0;
+    };
+    cands.sort(cmp);
+    const top = cands.filter(o => cmp(o, cands[0]) === 0);
+    const pick = top[Math.floor(Math.random() * top.length)];
+    return [pick.first, pick.second];
+  }
 
   // Fallback builder: random pieces placed one after another on a copy of the board.
   // (Knows nothing about line clears; only guarantees all three can be placed in sequence.)
@@ -284,17 +336,6 @@
     return best;
   }
 
-  function helpBoost(s, p, inHole, crowd) {
-    if (s.cells.length < BOOST_MIN_CELLS && crowd < CRISIS_SMALL_OK) return 1;
-    let boost = 1;
-    if (p.lines > 0) {
-      const raw = (p.lines >= 2 ? CLEAR_BOOST_2 : CLEAR_BOOST_1) * (1 + CRISIS_BOOST * crowd);
-      boost = 1 + (raw - 1) / (1 + OVERHANG_SOFTEN * Math.max(0, p.net));
-    }
-    if (inHole && s.cells.length >= BOOST_MIN_CELLS) boost *= HOLE_FIT_BOOST;
-    return boost;
-  }
-
   // links = array of target pairs from zigzags already picked in this set.
   // A linked L pair penalty replaces (does not stack with) the same-base penalty.
   const dupPenalty = (s, set, links = []) => set.reduce((m, x) => {
@@ -304,17 +345,6 @@
     else if (x.base === s.base) f = DUP_SAME_BASE;
     return m * f;
   }, 1);
-
-  // Boosted pieces together may not exceed `cap` of the pool (soft: never below their own base weight).
-  function capHelpShare(pool, cap) {
-    let hot = 0, rest = 0;
-    for (const o of pool) { if (o.boosted) hot += o.w; else rest += o.w; }
-    if (!hot || !rest) return;
-    const max = rest * cap / (1 - cap);
-    if (hot <= max) return;
-    const f = max / hot;
-    for (const o of pool) if (o.boosted) o.w = Math.max(o.base, o.w * f);
-  }
 
   // Big pieces first: keep only pieces of MIN_CELLS+ cells if there are any, otherwise keep everything.
   // Small pieces are a last resort, used only when no big piece qualifies.
@@ -333,54 +363,59 @@
 
   // One piece at a time. Each slot sees the board as if the earlier pieces were already placed.
   // Slot 1 always fits the real board, so at least one piece is always placeable.
-  // Slots 2 and 3 are only helped if the previous piece actually cleared a line in the simulation (a chain).
   // A zigzag in slot 1 or 2 boosts its matching L4 pair in the later slots of the same set.
   // mustClear: the set has to clear a line in the simulation. If nothing has cleared before slot 2,
   // slot 2 is limited to pieces that clear or leave a clear for some slot-3 piece; if nothing has
   // cleared before slot 3, slot 3 is limited to pieces that clear.
-  // forced: a line-perfect {s, r, c, lines} that takes slot 1 at a fixed spot.
+  // forced: a line-perfect {s, r, c, lines} that takes slot 1 at a fixed spot, or an array of two
+  // (a 2-block perfect or a 1-line pair) that takes slots 1 and 2 at fixed spots.
   // Chain: when slot 1 is forced, slot 2 re-runs the line-perfect checker on the simulated board
-  // after slot 1 popped (PERFECT_CHAIN_CHANCE). Slot 3 is built normally.
-  function sequentialSet(b, assist, helpAllowed, crowd, mustClear, forced) {
+  // after slot 1 popped (PERFECT_CHAIN_CHANCE). If slot 2 was perfect too, slot 3 does the same on the
+  // board after slot 2 popped (PERFECT_CHAIN3_CHANCE). A slot that is not perfect ends the chain.
+  // After a 2-block perfect or a 1-line pair (slots 1-2 forced), slot 3 may still chain a line-perfect
+  // the same way.
+  // Line-perfect then 2-block: when slot 1 is a line-perfect, slot 2 first rolls PERFECT_LINE_THEN_2BLOCK_CHANCE
+  // to look for a 2-block perfect on the board after slot 1 popped. If found, it takes slots 2 and 3.
+  // If not found (or the roll misses), slot 2 falls back to the normal line-perfect chain.
+  function sequentialSet(b, mustClear, forced) {
     const live = SHAPES.filter(s => s.baseWeight > 0 && fits(b, s) && (sets > 2 || s.cells.length <= 6));
     let W = b, g = toMask(b);
     const set = [], trace = [];
-    let helped = false;
-    let lastLines = 0;
     let totalLines = 0;   // lines cleared so far in the simulation
-    let zigLinks = [];   // target L4 pairs activated by zigzags picked in slots 1-2
-    const sustain = !popped && streak >= 2 ? Math.min(0.3, 0.1 * streak) : 0;
-    const pHelp = Math.min(0.95, HELP_P_MIN + HELP_P_SPAN * assist + sustain);
+    let zigLinks = [];    // target L4 pairs activated by zigzags picked in slots 1-2
+    const presets = !forced ? [] : Array.isArray(forced) ? forced : [forced];   // fixed pieces for slot 1 (or slots 1-2)
+    let chainOn = presets.length > 0;   // true while the previous slot was a line-perfect
+    let perfectCount = 0;               // how many slots of this set were line-perfect (for the console name)
+    let pending = [];                   // second piece of a 2-block perfect found mid-set (fixed for the next slot)
+    let pairAfterLine = false;          // true when slots 2-3 became a 2-block perfect after a line-perfect in slot 1
 
     for (let k = 0; k < 3; k++) {
-      const slotCrowd = k === 0 ? crowd : 0;
-      const crisis = slotCrowd > 0;
-      const chain = k === 0 || lastLines > 0;
-      const chance = crisis ? Math.max(pHelp, slotCrowd) : pHelp;
-      const wantHelp = chain && (helpAllowed || crisis) && Math.random() < chance;
-      const cap = HELP_SHARE_CAP + CRISIS_CAP_EXTRA * slotCrowd;
-      const holes = wantHelp ? new Set(holeGroups(W).flat()) : null;
-
       const needClear = mustClear && totalLines === 0;   // nothing has cleared yet in the simulation
 
       let pool = [];
-      let forcedHere = k === 0 ? forced : null;
-      if (k === 1 && forced && Math.random() < PERFECT_CHAIN_CHANCE) {
-        // W is the board after slot 1 was placed and popped in the simulation
-        forcedHere = findLinePerfect(W, set.map(x => x.id)) || null;
+      let forcedHere = k < presets.length ? presets[k] : null;
+      if (!forcedHere && pending.length) forcedHere = pending.shift();   // second piece of a mid-set 2-block perfect
+      if (!forcedHere && k === 1 && chainOn && presets.length === 1 && Math.random() < PERFECT_LINE_THEN_2BLOCK_CHANCE) {
+        // slot 1 was a line-perfect: look for a 2-block perfect on the board after it popped (slots 2 and 3)
+        const pr = findTwoBlockPerfect(W, set.map(x => x.id));
+        if (pr) { forcedHere = pr[0]; pending = [pr[1]]; pairAfterLine = true; }
       }
+      if (!forcedHere && k > 0 && chainOn && Math.random() < (k === 1 ? PERFECT_CHAIN_CHANCE : PERFECT_CHAIN3_CHANCE)) {
+        // W is the board after the previous slot was placed and popped in the simulation
+        forcedHere = findLinePerfect(W, set.map(x => x.id), true) || null;
+      }
+      chainOn = !!forcedHere;   // the chain only continues while each slot was line-perfect
+      if (forcedHere && !simFits(g, forcedHere.s, forcedHere.r, forcedHere.c)) return null;   // safety: preset must fit the simulated board
       if (forcedHere) {
         // line-perfect piece: fixed shape and fixed spot
-        pool.push({ s: forcedHere.s, p: { r: forcedHere.r, c: forcedHere.c }, pen: 1, zig: 1, base: 1, w: 1, boosted: false });
+        pool.push({ s: forcedHere.s, p: { r: forcedHere.r, c: forcedHere.c }, pen: 1, zig: 1, w: 1 });
       }
       for (const s of forcedHere ? [] : live) {
         const p = bestPlacement(g, s);
         if (!p) continue; // does not fit the simulated board
         const pen = dupPenalty(s, set, zigLinks);
         const zig = zigLinks.some(t => t.includes(s.id)) ? ZIG_L_BOOST : 1;
-        const base = s.baseWeight * pen * zig;
-        const boost = wantHelp ? helpBoost(s, p, holes.has(s), slotCrowd) : 1;
-        pool.push({ s, p, pen, zig, base, w: base * boost, boosted: boost > 1 });
+        pool.push({ s, p, pen, zig, w: s.baseWeight * pen * zig });
       }
 
       if (!pool.length) {
@@ -390,7 +425,6 @@
         const filler = weightedPick(preferBig(live), s => s.baseWeight * dupPenalty(s, set, zigLinks));
         if (!filler) return null;
         set.push(filler);
-        lastLines = 0;
         trace.push(`slot${k + 1}: FILLER (nothing fit simulated board) -> ${filler.id}`);
         continue;
       }
@@ -408,83 +442,69 @@
         pool = preferBig(pool, o => o.s);   // big pieces first, small only if no big one qualifies
       }
 
-      if (wantHelp) capHelpShare(pool, cap);
       const pick = weightedPick(pool, o => o.w);
-      if (pick.boosted) helped = true;
+      if (forcedHere) perfectCount++;
       set.push(pick.s);
       if (k < 2 && ZIG_L[pick.s.id]) zigLinks.push(ZIG_L[pick.s.id]);
       const res = applyMove(W, pick.s, pick.p.r, pick.p.c); // simulated, includes line clears
       W = res.board;
       g = toMask(W);
-      lastLines = res.lines;
       totalLines += res.lines;
       trace.push(
-        `slot${k + 1}: chain=${chain} help=${wantHelp} pool=${pool.length} -> ${pick.s.id}` +
-        ` boosted=${pick.boosted} dupPenalty=${pick.pen} zigBoost=${pick.zig} simLines=${res.lines}` +
+        `slot${k + 1}: pool=${pool.length} -> ${pick.s.id}` +
+        ` dupPenalty=${pick.pen} zigBoost=${pick.zig} simLines=${res.lines}` +
         (needClear ? " rescue=true" : "") +
-        (forcedHere ? ` PERFECT lines=${forcedHere.lines}` : "")
+        (forcedHere ? ` PERFECT${forcedHere.pair ? "-PAIR" : ""} lines=${forcedHere.lines}` : "")
       );
     }
     if (mustClear && totalLines === 0) return null;
-    return { set, helped, trace };
+    return { set, trace, perfectCount, pairAfterLine };
   }
 
   // ---------- Entry point ----------
   function generatePieces(b) {
     sets++;
-    const carried = stash; stash = null;
-    const assist = assistLevel(b);
-    const crowd = crowdLevel(b);
     const filled = filledCells(b);
-    const helpAllowed = helpStreak < 2 || streak >= 3;
 
-    // Plain no-duplicate picker, used only by the perfect-clear search.
-    const plain = SHAPES.filter(s => s.baseWeight > 0 && fits(b, s) && (sets > 2 || s.cells.length <= 6));
-    const plainSet = () => {
-      const set = [];
-      for (let i = 0; i < 3; i++) {
-        const s = weightedPick(plain.filter(x => !set.some(y => y.id === x.id)));
-        if (!s) return null;
-        set.push(s);
-      }
-      return set;
-    };
-
-    // Rare override 1: a previously found perfect-clear set
-    if (helpAllowed && carried) {
-      const e = evaluate(b, carried);
-      if (e && e.perfect && easyOpening(carried) && Math.random() < CARRY_CHANCE) {
-        helpStreak++;
-        return logPath("carried-perfect", b, carried);
-      }
-    }
-
-    // Rare override 2: search for a board-clearing set
-    if (helpAllowed && filled > 0 && filled <= PERFECT_CELLS) {
-      const perfects = [];
-      for (let t = 0; t < PERFECT_TRIES; t++) {
-        const set = plainSet();
-        if (!set) break;
-        const e = evaluate(b, set);
-        if (e && e.perfect && smallCount(set) === 0 && easyOpening(set)) perfects.push(set);
-      }
-      if (perfects.length) {
-        const set = perfects[Math.floor(Math.random() * perfects.length)];
-        if (Math.random() < PERFECT_CHANCE) { helpStreak++; return logPath("perfect-search", b, set); }
-        stash = set;
+    // 2-block perfect (highest priority): slots 1 and 2 are two pieces that together clear
+    // 2 consecutive lines with no stick outs. Slot 3 may still chain a line-perfect (PERFECT_CHAIN3_CHANCE).
+    const pair = findTwoBlockPerfect(b);
+    if (pair && Math.random() < PERFECT_PAIR_CHANCE) {
+      for (let t = 0; t < SET_TRIES; t++) {
+        const r = sequentialSet(b, false, pair);
+        if (r && easyOpening(r.set)) {
+          const name = "line-perfect-2BLOCK" + (r.perfectCount > 2 ? "-CHAIN3" : "");
+          return logPath(name, b, shuffle(r.set), r.trace, t + 1);
+        }
       }
     }
 
     // Line-perfect: the checker runs before the normal builder. Slot 1 gets a piece that clears 2 lines
     // (or 1 line without reaching a third line). Slot 2 is checked again on the board after slot 1 pops
-    // (see PERFECT_CHAIN_CHANCE); slot 3 is built normally on the board after that.
+    // (PERFECT_CHAIN_CHANCE), and slot 3 on the board after slot 2 pops (PERFECT_CHAIN3_CHANCE, only if
+    // slot 2 was perfect). Any slot that is not perfect is built normally.
     const perfect = findLinePerfect(b);
     if (perfect && Math.random() < PERFECT_LINE_CHANCE) {
       for (let t = 0; t < SET_TRIES; t++) {
-        const r = sequentialSet(b, assist, helpAllowed, crowd, false, perfect);
+        const r = sequentialSet(b, false, perfect);
         if (r && easyOpening(r.set)) {
-          helpStreak++;
-          return logPath(`line-perfect-${perfect.lines}`, b, shuffle(r.set), r.trace, t + 1);
+          // console name: line-perfect-<lines cleared by slot 1>, plus -CHAIN2 / -CHAIN3 when more slots were perfect
+          const name = `line-perfect-${perfect.lines}` + (r.pairAfterLine ? "-THEN2BLOCK" : r.perfectCount > 1 ? `-CHAIN${r.perfectCount}` : "");
+          return logPath(name, b, shuffle(r.set), r.trace, t + 1);
+        }
+      }
+    }
+
+    // 1-line pair (lowest priority of the perfects): two pieces that together clear one line when no
+    // single piece can. Slots 1 and 2 are fixed to the pair; slot 3 may still chain a line-perfect
+    // (PERFECT_CHAIN3_CHANCE). Used PERFECT_LINEPAIR_CHANCE of the time when one exists.
+    const linePair = findOneLinePair(b);
+    if (linePair && Math.random() < PERFECT_LINEPAIR_CHANCE) {
+      for (let t = 0; t < SET_TRIES; t++) {
+        const r = sequentialSet(b, false, linePair);
+        if (r && easyOpening(r.set)) {
+          const name = "line-perfect-LINEPAIR" + (r.perfectCount > 2 ? "-CHAIN3" : "");
+          return logPath(name, b, shuffle(r.set), r.trace, t + 1);
         }
       }
     }
@@ -495,9 +515,8 @@
     const mustClear = GUARANTEE_CLEAR && filled >= GUARANTEE_MIN_CELLS;
     for (const guard of mustClear ? [true, false] : [false]) {
       for (let t = 0; t < SET_TRIES; t++) {
-        const r = sequentialSet(b, assist, helpAllowed, crowd, guard);
+        const r = sequentialSet(b, guard);
         if (r && easyOpening(r.set)) {
-          helpStreak = r.helped ? helpStreak + 1 : 0;
           const path = mustClear && !guard ? "sequential-NO-GUARANTEE" : "sequential";
           return logPath(path, b, shuffle(r.set), r.trace, t + 1);
         }
@@ -505,7 +524,6 @@
     }
 
     // Fallbacks
-    helpStreak = 0;
     const built = buildSet(b, true) || buildSet(b, false);
     if (built) return logPath("buildSet-fallback", b, built);
     const any = SHAPES.filter(s => fits(b, s));
