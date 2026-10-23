@@ -9,7 +9,7 @@
   const updateButton = make("button", "", "");
   updateButton.className = "icon-button update-button";
   updateButton.type = "button";
-  updateButton.setAttribute("aria-label", "Check for updates");
+  updateButton.setAttribute("aria-label", "Install or update app");
   updateButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v7"/><path d="M8.5 11.5L12 15l3.5-3.5"/><path d="M8 17.5h8"/></svg>';
   const gear = make("button", "font-size:26px;background:none;border:none;color:var(--gear);cursor:pointer;", "\u2699");
   gear.className = "icon-button settings-button";
@@ -135,8 +135,20 @@
     if (displayedScore !== score || !scoreEl.textContent) animateScore(score);
     bx.clearRect(0, 0, SIZE, SIZE); bx.fillStyle = activeTheme.boardBg; bx.fillRect(0, 0, SIZE, SIZE);
     for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-      if (board[r][c]) cell(bx, c * CELL, r * CELL, CELL, activeTheme.pieces[board[r][c] - 1]);
-      else { bx.fillStyle = activeTheme.emptyCell; bx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); bx.strokeStyle = activeTheme.emptyStroke; bx.lineWidth = 0.7; bx.strokeRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2); }
+      const value = board[r][c];
+      if (value) {
+        const paletteIndex = typeof value === "number" ? value - 1 : paletteIndexForColor(value);
+        if (paletteIndex >= 0 && paletteIndex < activeTheme.pieces.length) {
+          if (typeof value === "string") board[r][c] = paletteIndex + 1;
+          cell(bx, c * CELL, r * CELL, CELL, activeTheme.pieces[paletteIndex]);
+        } else {
+          console.warn("Displaying an unsupported saved board color with the fallback palette:", value);
+          cell(bx, c * CELL, r * CELL, CELL, activeTheme.pieces[0]);
+        }
+      } else {
+        bx.fillStyle = activeTheme.emptyCell; bx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2);
+        bx.strokeStyle = activeTheme.emptyStroke; bx.lineWidth = 0.7; bx.strokeRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2);
+      }
     }
     if (drag) {
       const s = pieces[drag.i], { r, c } = target();

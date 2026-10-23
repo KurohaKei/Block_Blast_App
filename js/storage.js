@@ -8,7 +8,8 @@
     try { return localStorage.getItem(key); } catch (e) { return null; }
   }
   function localSet(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) {}
+    try { localStorage.setItem(key, value); }
+    catch (error) { console.warn("Unable to save browser data for " + key + ":", error); }
   }
   function localRemove(key) {
     try { localStorage.removeItem(key); } catch (e) {}
@@ -42,7 +43,7 @@
   }
   function serializeState(state) {
     return {
-      board: state.board.map(row => row.slice()), pieces: state.pieces.map(shapeIdentity), score: state.score,
+      board: state.board.map(row => row.map(normalizeCell)), pieces: state.pieces.map(shapeIdentity), score: state.score,
       streak: state.streak, popped: state.popped, sets: state.sets,
       stash: state.stash && state.stash.map(shapeIdentity), over: state.over,
       best: state.best, bestAtStart: state.bestAtStart
@@ -85,6 +86,7 @@
       board = restored.board; pieces = restored.pieces; score = restored.score;
       streak = restored.streak; popped = restored.popped; sets = restored.sets;
       stash = restored.stash; over = restored.over; best = Math.max(best, restored.best); bestAtStart = restored.bestAtStart;
+      saveGame();
       return true;
     } catch (e) { return false; }
   }

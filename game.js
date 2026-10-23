@@ -5,7 +5,26 @@
   let board, pieces, score, best = loadBest(), bestAtStart = best, shownBest = best, streak, popped, over, drag = null, ghost = null, stash = null, sets = 0;
   let raf = 0, generationTimer = 0, generationPending = false, trayDealAt = 0;
   let updateStatusTimer = 0, updateReloadPending = false, updateReloadStarted = false, updateInProgress = false;
+  let installPromptEvent = null, installationCompleted = false;
   const UPDATE_RELOAD_KEY = "bb_update_reload";
+
+  const isInstalledMode = () =>
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
+    navigator.standalone === true ||
+    installationCompleted;
+
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    installPromptEvent = event;
+    updateButton.setAttribute("aria-label", "Install app");
+  });
+  window.addEventListener("appinstalled", () => {
+    installationCompleted = true;
+    installPromptEvent = null;
+    updateButton.setAttribute("aria-label", "Check for updates");
+    showUpdateStatus("App installed");
+  });
 
   try { sessionStorage.removeItem(UPDATE_RELOAD_KEY); } catch (error) {}
   function showUpdateStatus(message, persistent = false) {
@@ -143,7 +162,32 @@
       if (!updateInProgress) updateButton.disabled = false;
     }
   }
-  updateButton.addEventListener("click", checkForUpdates);
+  async function installApp() {
+    const promptEvent = installPromptEvent;
+    installPromptEvent = null;
+    updateButton.disabled = true;
+    showUpdateStatus("Opening install prompt\u2026");
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      if (choice.outcome === "accepted") showUpdateStatus("Installation started");
+      else showUpdateStatus("Installation cancelled");
+    } catch (error) {
+      console.warn("Unable to open the app install prompt:", error);
+      showUpdateStatus("Install using your browser menu");
+    } finally {
+      updateButton.disabled = false;
+    }
+  }
+  function installOrUpdate() {
+    if (installPromptEvent) return installApp();
+    if (!isInstalledMode() && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
+      showUpdateStatus("Install: Share \u2192 Add to Home Screen");
+      return;
+    }
+    return checkForUpdates();
+  }
+  updateButton.addEventListener("click", installOrUpdate);
 
   const loop = () => {
     render();
@@ -169,7 +213,7 @@
   }
   function finishGame() {
     if (over) return;
-    over = true; generationPending = false; shownBest = best; clearSave();
+    over = true; generationPending = false; shownBest = best; saveGame();
     audioGameOver(); vibrate([60, 40, 60, 40, 120]);
     startGameOverWave();
     showGameOver(); render();
@@ -198,6 +242,7 @@
     if (ghost) { ghost.remove(); ghost = null; }
     pieces = generatePieces(board);
     trayDealAt = performance.now();
+    saveGame();
     render();
     if (!raf) loop();
   }
@@ -279,6 +324,13 @@
     generationPending = true;
     generateNextSet();
   }
+  function persistOnLeave() {
+    if (board && pieces && pieces.length === 3) saveGame();
+  }
+  window.addEventListener("pagehide", persistOnLeave);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") persistOnLeave();
+  });
   window.addEventListener("resize", resizeCanvases);
   window.addEventListener("orientationchange", resizeCanvases);
   const savedGameAvailable = restoreGame();
