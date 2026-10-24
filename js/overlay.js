@@ -11,6 +11,12 @@
   const soundToggle = make("input", "", ""); soundToggle.type = "checkbox"; soundToggle.id = "sound-toggle";
   const vibrationToggle = make("input", "", ""); vibrationToggle.type = "checkbox"; vibrationToggle.id = "vibration-toggle";
   const motionToggle = make("input", "", ""); motionToggle.type = "checkbox"; motionToggle.id = "motion-toggle";
+  const fingerSensitivitySelect = make("select", "", "");
+  fingerSensitivitySelect.id = "finger-sensitivity";
+  [[1, "Normal (1.0x)"], [1.25, "Faster (1.25x)"], [1.5, "Fast (1.5x)"], [1.75, "Fastest (1.75x)"]].forEach(([value, label]) => {
+    const option = make("option", "", label); option.value = String(value); fingerSensitivitySelect.appendChild(option);
+  });
+  const fingerSensitivityLabel = make("label", "", "Finger drag sensitivity"); fingerSensitivityLabel.className = "setting-select-row"; fingerSensitivityLabel.htmlFor = fingerSensitivitySelect.id; fingerSensitivityLabel.appendChild(fingerSensitivitySelect);
   const settingRow = (input, text) => { const label = make("label", "", text); label.className = "setting-row"; label.htmlFor = input.id; label.prepend(input); return label; };
   const resetThemeButton = make("button", "", "Reset to Default Theme"); resetThemeButton.className = "dialog-button";
   const restartButton = make("button", "", "Restart Game"); restartButton.className = "dialog-button";
@@ -20,7 +26,7 @@
   const restartNo = make("button", "", "Cancel"); restartNo.className = "dialog-button";
   const settingsClose = make("button", "", "Close"); settingsClose.className = "dialog-button";
   restartConfirm.append(restartQuestion, restartYes, restartNo);
-  settingsBody.append(settingRow(soundToggle, "Sound"), settingRow(vibrationToggle, "Vibration"), settingRow(motionToggle, "Reduced motion"), resetThemeButton, restartButton, restartConfirm, settingsClose);
+  settingsBody.append(settingRow(soundToggle, "Sound"), settingRow(vibrationToggle, "Vibration"), settingRow(motionToggle, "Reduced motion"), fingerSensitivityLabel, resetThemeButton, restartButton, restartConfirm, settingsClose);
   settingsDialog.append(settingsTitle, settingsBody); settingsOverlay.appendChild(settingsDialog); document.body.appendChild(settingsOverlay);
 
   const startOverlay = make("div", "", "");
@@ -60,6 +66,7 @@
 
   function syncSettings() {
     soundToggle.checked = settings.sound; vibrationToggle.checked = settings.vibration; motionToggle.checked = settings.reducedMotion;
+    fingerSensitivitySelect.value = String(settings.fingerSensitivity);
     document.body.classList.toggle("reduced-motion", settings.reducedMotion);
     resetThemeButton.disabled = getTheme().id === DEFAULT_THEME.id;
   }
@@ -78,6 +85,10 @@
     settings.sound = soundToggle.checked; settings.vibration = vibrationToggle.checked; settings.reducedMotion = motionToggle.checked;
     saveSettings(); syncSettings(); render();
   }));
+  fingerSensitivitySelect.addEventListener("change", () => {
+    settings.fingerSensitivity = Number(fingerSensitivitySelect.value);
+    saveSettings();
+  });
   resetThemeButton.onclick = () => {
     resetTheme();
     render();

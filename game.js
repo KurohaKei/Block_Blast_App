@@ -280,12 +280,20 @@
     if (!pieces[i]) return;
     unlockAudio(); audioPick();
     if (ghost) ghost.remove();
-    drag = { i, x: e.clientX, y: e.clientY };
+    drag = {
+      i, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
+      sensitivity: e.pointerType === "touch" ? settings.fingerSensitivity : 1
+    };
     ghost = make("canvas", "position:fixed;pointer-events:none;filter:drop-shadow(0 5px 7px rgba(0,0,0,.45));transform:scale(1.05);transform-origin:center;max-width:none;");
     document.body.appendChild(ghost); resizeGhost();
     trayCv.setPointerCapture(e.pointerId); cancelAnimationFrame(raf); loop();
   };
-  trayCv.onpointermove = e => { if (!drag || drag.keyboard) return; drag.x = e.clientX; drag.y = e.clientY; moveGhost(); };
+  trayCv.onpointermove = e => {
+    if (!drag || drag.keyboard) return;
+    drag.x = drag.startX + (e.clientX - drag.startX) * drag.sensitivity;
+    drag.y = drag.startY + (e.clientY - drag.startY) * drag.sensitivity;
+    moveGhost();
+  };
   trayCv.onpointerup = () => endDrag(true);
   trayCv.onpointercancel = () => endDrag(false);
   trayCv.onlostpointercapture = () => endDrag(false);

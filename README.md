@@ -22,7 +22,7 @@ On Android, open the site in Chrome and choose **Install app** (or **Add to Home
 - On desktop, press `1`, `2`, or `3` to select a piece, use the arrow keys to position it, then press `Space` or `Enter` to place it. Press `Esc` to cancel.
 - Fill a complete row or column to clear it.
 - Clear lines to increase your streak multiplier. Three placements without a line clear reset the streak.
-- Open Settings with the gear button to adjust sound, vibration, reduced motion, or restart.
+- Open Settings with the gear button to adjust sound, vibration, reduced motion, finger drag sensitivity, or restart.
 - Every Perfect board clear switches to another theme without repeating until the theme bag cycles. Themes persist between sessions; use **Reset to Default Theme** in Settings to restore the original palette.
 - Use the download button beside Settings to install the app when the browser offers an install prompt, or to check for an app update otherwise. The page saves the current game, then activates an installed update and reloads; an update waits until you request it.
 - When no remaining piece fits, the game-over dialog offers a Play Again button.

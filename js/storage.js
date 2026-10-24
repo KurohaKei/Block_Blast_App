@@ -1,4 +1,5 @@
   const SAVE_KEY = "bb_save", SETTINGS_KEY = "bb_settings";
+  const FINGER_SENSITIVITIES = [1, 1.25, 1.5, 1.75];
   const validCell = value => value === null ||
     Number.isInteger(value) && value >= 1 && value <= DEFAULT_THEME.pieces.length ||
     typeof value === "string" && paletteIndexForColor(value) >= 0;
@@ -16,20 +17,24 @@
   }
   function loadSettings() {
     const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const defaults = { sound: true, vibration: true, reducedMotion: !!reduced };
+    const defaults = { sound: true, vibration: true, reducedMotion: !!reduced, fingerSensitivity: 1.25 };
     try {
       const stored = JSON.parse(localGet(SETTINGS_KEY));
       if (stored && stored.version === 1) return {
         sound: typeof stored.sound === "boolean" ? stored.sound : defaults.sound,
         vibration: typeof stored.vibration === "boolean" ? stored.vibration : defaults.vibration,
-        reducedMotion: typeof stored.reducedMotion === "boolean" ? stored.reducedMotion : defaults.reducedMotion
+        reducedMotion: typeof stored.reducedMotion === "boolean" ? stored.reducedMotion : defaults.reducedMotion,
+        fingerSensitivity: FINGER_SENSITIVITIES.includes(stored.fingerSensitivity) ? stored.fingerSensitivity : defaults.fingerSensitivity
       };
     } catch (e) {}
     return defaults;
   }
   let settings = loadSettings();
   function saveSettings() {
-    localSet(SETTINGS_KEY, JSON.stringify({ version: 1, sound: settings.sound, vibration: settings.vibration, reducedMotion: settings.reducedMotion }));
+    localSet(SETTINGS_KEY, JSON.stringify({
+      version: 1, sound: settings.sound, vibration: settings.vibration,
+      reducedMotion: settings.reducedMotion, fingerSensitivity: settings.fingerSensitivity
+    }));
   }
   const shapeIdentity = shape => shape ? {
     cells: shape.cells.map(cell => cell.slice()), color: DEFAULT_THEME.pieces[shape.paletteIndex]

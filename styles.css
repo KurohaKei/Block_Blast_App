@@ -88,7 +88,8 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
 }
@@ -151,6 +152,24 @@ button:disabled {
   width: 20px;
   height: 20px;
   accent-color: var(--accent);
+}
+
+.setting-select-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 17px;
+}
+
+.setting-select-row select {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 10px;
+  background: var(--button-bg);
+  color: #fff;
+  font: inherit;
 }
 
 .dialog-button {
