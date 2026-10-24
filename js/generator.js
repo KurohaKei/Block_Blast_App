@@ -12,15 +12,15 @@
   const GUARANTEE_MIN_CELLS = 30;    // guarantee applies when the real board has at least this many filled cells
 
   // Line-perfect checker (runs before the normal builder)
-  const PERFECT_LINE_CHANCE = 1;     // chance a found line-perfect is used (1 = always)
+  const PERFECT_LINE_CHANCE = 0.9;     // chance a found line-perfect is used (0.9 = 90%)
   const PERFECT_MAX_SPAN = 2;        // a 1-line perfect may span at most this many lines across the cleared line
-  const PERFECT_PAIR_CHANCE = 1;     // chance a found 2-block perfect is used (1 = always); checked before the 1-block perfects
+  const PERFECT_PAIR_CHANCE = 0.9;     // chance a found 2-block perfect is used (0.9 = 90%); checked before the 1-block perfects
   const PERFECT_PAIR_MAX_CELLS = 12; // a 2-block perfect only looks at two-line strips with at most this many empty cells
-  const PERFECT_LINEPAIR_CHANCE = 0.8;    // chance a found 1-line pair is used; checked after the line-perfect
+  const PERFECT_LINEPAIR_CHANCE = 0.9;    // chance a found 1-line pair is used; checked after the line-perfect
   const PERFECT_LINEPAIR_MAX_CELLS = 7;   // a 1-line pair only looks at lines with at most this many empty cells
   const PERFECT_LINE_THEN_2BLOCK_CHANCE = 0.8;   // after a line-perfect in slot 1, chance slots 2-3 become a 2-block perfect (checked before the slot 2 line-perfect chain)
-  const PERFECT_CHAIN_CHANCE = 1;    // chance slot 2 also gets a line-perfect, checked on the board after slot 1 pops (1 = always)
-  const PERFECT_CHAIN3_CHANCE = 0.8; // chance slot 3 also gets a line-perfect, checked on the board after slot 2 pops (only if slot 2 was perfect)
+  const PERFECT_CHAIN_CHANCE = 0.9;    // chance slot 2 also gets a line-perfect, checked on the board after slot 1 pops (0.9 = 90%)
+  const PERFECT_CHAIN3_CHANCE = 0.9; // chance slot 3 also gets a line-perfect, checked on the board after slot 2 pops (only if slot 2 was perfect)(0.9 = 90%)
 
   // Zigzag -> matching L4 pair (boosts those L4s in later slots of the same set)
   const ZIG_L_BOOST = 1.5;                    // modest multiplier on the L4's base weight
