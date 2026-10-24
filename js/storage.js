@@ -1,5 +1,5 @@
   const SAVE_KEY = "bb_save", SETTINGS_KEY = "bb_settings";
-  const FINGER_SENSITIVITIES = [1, 1.25, 1.5, 1.75];
+  const FINGER_SENSITIVITIES = [1, 1.15, 1.25, 1.35, 1.5];
   const validCell = value => value === null ||
     Number.isInteger(value) && value >= 1 && value <= DEFAULT_THEME.pieces.length ||
     typeof value === "string" && paletteIndexForColor(value) >= 0;

@@ -13,7 +13,7 @@
   const motionToggle = make("input", "", ""); motionToggle.type = "checkbox"; motionToggle.id = "motion-toggle";
   const fingerSensitivitySelect = make("select", "", "");
   fingerSensitivitySelect.id = "finger-sensitivity";
-  [[1, "Normal (1.0x)"], [1.25, "Faster (1.25x)"], [1.5, "Fast (1.5x)"], [1.75, "Fastest (1.75x)"]].forEach(([value, label]) => {
+  [[1, "1.0x"], [1.15, "1.15x"], [1.25, "1.25x"], [1.35, "1.35x"], [1.5, "1.5x"]].forEach(([value, label]) => {
     const option = make("option", "", label); option.value = String(value); fingerSensitivitySelect.appendChild(option);
   });
   const fingerSensitivityLabel = make("label", "", "Finger drag sensitivity"); fingerSensitivityLabel.className = "setting-select-row"; fingerSensitivityLabel.htmlFor = fingerSensitivitySelect.id; fingerSensitivityLabel.appendChild(fingerSensitivitySelect);
